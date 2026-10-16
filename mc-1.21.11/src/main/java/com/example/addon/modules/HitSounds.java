@@ -23,7 +23,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.function.Supplier;
 
-/** Plays a sound when one of your hits lands (the server confirms the damage). Only you hear it. */
 public class HitSounds extends Module {
     public enum Sound {
         Exp(() -> SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP),
@@ -81,7 +80,7 @@ public class HitSounds extends Module {
         .build());
 
     public HitSounds() {
-        super(AddonTemplate.CATEGORY, "hit-sounds", "Plays a sound when your hits land. Only you hear it.");
+        super(AddonTemplate.VISUAL, "hit-sounds", "Plays a sound when your hits land. Only you hear it.");
     }
 
     @Override
@@ -101,7 +100,6 @@ public class HitSounds extends Module {
         folder();
     }
 
-    // Packets arrive on the network thread; play on the game thread
     @EventHandler
     private void onPacket(PacketEvent.Receive event) {
         if (!(event.packet instanceof EntityDamageS2CPacket packet)) return;
@@ -120,7 +118,6 @@ public class HitSounds extends Module {
         if (!FileChoices.isFile(customFile.get())) return;
         Path file = folder().resolve(customFile.get());
         if (!Files.isRegularFile(file) || !CustomSound.isSupported(file)) return;
-        // Outside Minecraft's engine, so apply the game's master volume ourselves
         CustomSound.play(file, vol * mc.options.getSoundVolume(SoundCategory.MASTER), p, startTime.get(), playLength.get());
     }
 
@@ -134,7 +131,6 @@ public class HitSounds extends Module {
         return dir;
     }
 
-    // The setting field isn't assigned yet while its own builder runs, so read it lazily
     private String customFile() {
         return customFile == null ? null : customFile.get();
     }

@@ -36,19 +36,22 @@ import org.slf4j.Logger;
 public class AddonTemplate extends MeteorAddon {
     public static final Logger LOG = LogUtils.getLogger();
     public static final Category CATEGORY = new Category("Larper Client");
+    public static final Category AUTOMATION = new Category("Larper Automation");
+    public static final Category VISUAL = new Category("Larper Visual");
     public static final HudGroup HUD_GROUP = new HudGroup("Larper Client");
 
     @Override
     public void onInitialize() {
         LOG.info("Initializing Larper Client");
 
-        // Modules
         Modules.get().add(new Compass());
         Modules.get().add(new Knife());
         Modules.get().add(new HitSounds());
         Modules.get().add(new HandAura());
         Modules.get().add(new CustomSky());
         Modules.get().add(new KeyWindCharge());
+        Modules.get().add(new com.example.addon.modules.PearlCatch());
+        Modules.get().add(new com.example.addon.modules.XpMacro());
         Modules.get().add(new Twerk());
         Modules.get().add(new BPS());
         Modules.get().add(new CinematicDeath());
@@ -56,6 +59,10 @@ public class AddonTemplate extends MeteorAddon {
         Modules.get().add(new OreSim());
         Modules.get().add(new TntCartAssist());
         Modules.get().add(new TurnOffAll());
+        Modules.get().add(new com.example.addon.modules.SilentCrystal());
+        Modules.get().add(new com.example.addon.modules.SilentAnchor());
+        Modules.get().add(new com.example.addon.modules.RenderMethod());
+        Modules.get().add(new com.example.addon.modules.AutoHomeMethod());
         Modules.get().add(new OrbitOrbs());
         Modules.get().add(new Trail());
         Modules.get().add(new ChinaHat());
@@ -72,17 +79,38 @@ public class AddonTemplate extends MeteorAddon {
         Modules.get().add(new com.example.addon.modules.CustomCrosshair());
         Modules.get().add(new com.example.addon.modules.Footprints());
         Modules.get().add(new com.example.addon.modules.MagicCircle());
+        Modules.get().add(new com.example.addon.modules.PlayerModel());
+        Modules.get().add(new com.example.addon.modules.AutoMiner());
+        Modules.get().add(new com.example.addon.modules.AreaMiner());
+        Modules.get().add(new com.example.addon.modules.SchematicBuilder());
+        Modules.get().add(new com.example.addon.modules.ScreenShaders());
+        Modules.get().add(new com.example.addon.modules.AnimeFX());
+        Modules.get().add(new com.example.addon.modules.EnergyShield());
+        Modules.get().add(new com.example.addon.modules.ElectricAura());
+        Modules.get().add(new com.example.addon.modules.ShootingStars());
+        Modules.get().add(new com.example.addon.modules.SmoothCamera());
+        Modules.get().add(new com.example.addon.modules.SmoothThirdPerson());
+        Modules.get().add(new com.example.addon.modules.DynamicFov());
+        Modules.get().add(new com.example.addon.modules.CameraTilt());
+        Modules.get().add(new com.example.addon.modules.CrystalFX());
+        Modules.get().add(new com.example.addon.modules.AnchorFX());
+        Modules.get().add(new com.example.addon.modules.SpearFX());
+        Modules.get().add(new com.example.addon.modules.Keybinds());
+        Modules.get().add(new com.example.addon.modules.ModuleList());
+        Modules.get().add(new com.example.addon.modules.MaceFX());
+        Modules.get().add(new com.example.addon.modules.NoFog());
+        Modules.get().add(new com.example.addon.modules.ClickGuiStyle());
 
-        // Commands
         Commands.add(new CommandExample());
         Commands.add(new SeedCommand());
         Commands.add(new RegionCommand());
-
     }
 
     @Override
     public void onRegisterCategories() {
         Modules.registerCategory(CATEGORY);
+        Modules.registerCategory(AUTOMATION);
+        Modules.registerCategory(VISUAL);
     }
 
     @Override

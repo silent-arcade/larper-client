@@ -8,10 +8,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.stream.Stream;
 
-/**
- * Options for a file-picker dropdown. Meteor's dropdown crashes if the current value isn't one of the options
- * (or is null), so the list always starts with {@link #NONE} and always contains the current value.
- */
 public final class FileChoices {
     public static final String NONE = "None";
 
@@ -25,13 +21,11 @@ public final class FileChoices {
             files.filter(Files::isRegularFile).map(f -> f.getFileName().toString())
                 .filter(n -> matches(n, extensions)).sorted().forEach(out::add);
         } catch (IOException ignored) {
-            // folder missing or unreadable: just offer None
         }
         if (current != null && !current.isBlank() && !out.contains(current)) out.add(current);
         return out.toArray(String[]::new);
     }
 
-    /** True if value names a file (not None/blank). */
     public static boolean isFile(String value) {
         return value != null && !value.isBlank() && !value.equals(NONE);
     }

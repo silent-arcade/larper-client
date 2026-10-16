@@ -1,7 +1,6 @@
 package com.example.addon.oresim;
 
-// Ported from Meteor Rejects (https://github.com/AntiCope/meteor-rejects, GPL-3.0), utils/Ore.java,
-// translated from Mojang mappings to Yarn.
+// Ported from Meteor Rejects (https://github.com/AntiCope/meteor-rejects), GPL-3.0.
 
 import com.example.addon.mixin.CountPlacementModifierAccessor;
 import com.example.addon.mixin.HeightRangePlacementModifierAccessor;
@@ -140,7 +139,6 @@ public class Ore {
         var world = MinecraftClient.getInstance().world;
         int bottom = world.getBottomY();
         int height = world.getDimension().logicalHeight();
-        // 1.21.11's HeightContext reads the generator's minimum Y, so it needs the real one (upstream passes null)
         this.heightContext = new HeightContext(generator, HeightLimitView.create(bottom, height));
 
         for (PlacementModifier modifier : feature.placementModifiers()) {

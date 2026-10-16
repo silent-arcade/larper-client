@@ -8,7 +8,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// The sky image itself is drawn by Skyboxify; this only hides the sun, moon and stars on request
 @Mixin(SkyRendering.class)
 public abstract class SkyRenderingMixin {
     @Inject(method = "renderCelestialBodies", at = @At("HEAD"), cancellable = true)

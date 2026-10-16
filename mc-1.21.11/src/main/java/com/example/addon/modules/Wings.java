@@ -1,6 +1,6 @@
 package com.example.addon.modules;
 
-import com.example.addon.AddonTemplate;
+import com.example.addon.visuals.VisualModule;
 import com.example.addon.visuals.Fx;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.renderer.Renderer3D;
@@ -10,7 +10,6 @@ import meteordevelopment.meteorclient.settings.DoubleSetting;
 import meteordevelopment.meteorclient.settings.EnumSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
-import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
@@ -20,22 +19,14 @@ import net.minecraft.util.math.Vec3d;
 
 import java.util.Random;
 
-/**
- * Wings drawn on your back (third person), built from light rather than a model:
- *   Dragon: bat-like wings with thick bones, a wrist claw, a spiked top edge and dark membranes
- *   Mech: five sharp metal blades with glowing power lines, spreading and folding
- *   Inferno: wings of fire, white-hot at the shoulder to red at the flickering flame tips, shedding embers
- *   Shadow: jagged black wings with a glowing edge, trailing smoke
- * Only you see them.
- */
-public class Wings extends Module {
-    public enum Style { Dragon, Mech, Inferno, Shadow }
+public class Wings extends VisualModule {
+    public enum Style { Dragon, Mech, Inferno, Shadow, Angel, Butterfly, Energy }
 
     private final SettingGroup sg = settings.getDefaultGroup();
     private final SettingGroup sgColor = settings.createGroup("Colors");
 
     private final Setting<Style> style = sg.add(new EnumSetting.Builder<Style>()
-        .name("style").description("What kind of wings.").defaultValue(Style.Dragon).build());
+        .name("style").description("Dragon, Mech, Inferno, Shadow, Angel (feathers), Butterfly or Energy (hologram).").defaultValue(Style.Dragon).build());
 
     private final Setting<Double> size = sg.add(new DoubleSetting.Builder()
         .name("size").description("Wingspan of one wing (blocks).").defaultValue(1.6).range(0.4, 4).sliderRange(0.6, 2.8).build());
@@ -47,6 +38,9 @@ public class Wings extends Module {
         .name("particles").description("Embers (Inferno) and smoke (Shadow) coming off the wings.").defaultValue(true)
         .visible(() -> style.get() == Style.Inferno || style.get() == Style.Shadow).build());
 
+    private final Setting<Boolean> hideElytra = sg.add(new BoolSetting.Builder()
+        .name("hide-elytra").description("Hide your elytra while the wings are on, so they don't clash.").defaultValue(true).build());
+
     private final Setting<Boolean> halo = sg.add(new BoolSetting.Builder()
         .name("halo").description("A halo over your head too.").defaultValue(false).build());
 
@@ -56,7 +50,6 @@ public class Wings extends Module {
     private final Setting<Boolean> pulse = sgColor.add(new BoolSetting.Builder()
         .name("pulse").description("The glow breathes slowly.").defaultValue(true).build());
 
-    // Each style keeps its own colours; only the current style's show
     private final Setting<SettingColor> dragonFill = colorSetting("dragon-membrane", "Dragon: membrane colour.", new SettingColor(55, 4, 8, 200), Style.Dragon);
     private final Setting<SettingColor> dragonEdge = colorSetting("dragon-edge", "Dragon: bones, claw and edge glow.", new SettingColor(235, 45, 25, 255), Style.Dragon);
     private final Setting<SettingColor> mechFill = colorSetting("mech-plates", "Mech: blade plating.", new SettingColor(135, 145, 160, 240), Style.Mech);
@@ -65,6 +58,13 @@ public class Wings extends Module {
     private final Setting<SettingColor> infernoTips = colorSetting("inferno-tips", "Inferno: flame tips.", new SettingColor(255, 40, 0, 190), Style.Inferno);
     private final Setting<SettingColor> shadowFill = colorSetting("shadow-body", "Shadow: wing colour.", new SettingColor(8, 4, 14, 215), Style.Shadow);
     private final Setting<SettingColor> shadowEdge = colorSetting("shadow-edge", "Shadow: glowing edge.", new SettingColor(150, 50, 255, 255), Style.Shadow);
+
+    private final Setting<SettingColor> angelFill = colorSetting("angel-feathers", "Angel: feather colour.", new SettingColor(250, 250, 255, 225), Style.Angel);
+    private final Setting<SettingColor> angelEdge = colorSetting("angel-glow", "Angel: golden edge glow.", new SettingColor(255, 210, 110, 255), Style.Angel);
+    private final Setting<SettingColor> butterflyFill = colorSetting("butterfly-wings", "Butterfly: wing colour.", new SettingColor(30, 110, 255, 210), Style.Butterfly);
+    private final Setting<SettingColor> butterflyEdge = colorSetting("butterfly-edge", "Butterfly: border, veins and spots.", new SettingColor(140, 230, 255, 255), Style.Butterfly);
+    private final Setting<SettingColor> energyFill = colorSetting("energy-panels", "Energy: hologram panels.", new SettingColor(0, 255, 210, 55), Style.Energy);
+    private final Setting<SettingColor> energyEdge = colorSetting("energy-lines", "Energy: hologram lines and nodes.", new SettingColor(0, 255, 230, 255), Style.Energy);
 
     private final Setting<SettingColor> haloColor = sgColor.add(new ColorSetting.Builder()
         .name("halo-color").description("Halo colour (white = gold).").defaultValue(new SettingColor(255, 255, 255, 255))
@@ -79,13 +79,15 @@ public class Wings extends Module {
     private double phase;
     private long last;
 
+    private final Setting<Boolean> bloomOn = addBloom();
+    private final Setting<Boolean> tipGlowOn = feature("tip-glow", "Pulsing glow on the wing tips, blade tips and nodes.");
+    private final Setting<Boolean> edgeSparkles = feature("edge-sparkles", "Sparkles running along the wings' leading edge.");
+    private final Setting<Boolean> detailOn = feature("extra-detail", "Extra layers: angel coverts, butterfly veins, inferno tongue glows.");
+
     public Wings() {
-        super(AddonTemplate.CATEGORY, "wings", "Dragon, mech, fire or shadow wings on your back (third person). Only you see them.");
+        super("wings", "Dragon, mech, fire, shadow, angel, butterfly or energy wings on your back (third person). Only you see them.");
     }
 
-    // ---- Shapes: points in the wing's own plane (u = out along the span, v = up), root at (0, 0) ----
-
-    // Dragon: leading edge with spikes up to the wrist and out to the tip, then scalloped membrane between finger tips
     private static final double[][] DRAGON = {
         {0, 0}, {0.1, 0.2}, {0.14, 0.32}, {0.2, 0.3}, {0.26, 0.46}, {0.32, 0.43}, {0.4, 0.6},
         {0.55, 0.58}, {0.62, 0.66}, {0.7, 0.57}, {0.86, 0.52}, {1.05, 0.4},
@@ -96,13 +98,10 @@ public class Wings extends Module {
     private static final int[] DRAGON_TIPS = {11, 14, 17, 20};
     private static final double[] DRAGON_WRIST = {0.4, 0.6};
 
-    // Shadow: ragged, torn points all along the trailing edge
     private static final double[][] SHADOW = {
         {0, 0}, {0.14, 0.3}, {0.34, 0.5}, {0.6, 0.56}, {0.82, 0.5}, {1.05, 0.36},
         {0.84, 0.28}, {0.98, 0.14}, {0.78, 0.1}, {0.92, -0.06}, {0.7, -0.04}, {0.8, -0.26},
         {0.58, -0.18}, {0.62, -0.44}, {0.46, -0.3}, {0.42, -0.58}, {0.3, -0.38}, {0.2, -0.56}, {0.12, -0.32}, {0.03, -0.38}};
-
-    // ---- Drawing ----
 
     @EventHandler
     private void onRender(Render3DEvent event) {
@@ -112,11 +111,9 @@ public class Wings extends Module {
         float td = event.tickDelta;
         double yaw = Math.toRadians(MathHelper.lerpAngleDegrees(td, mc.player.lastBodyYaw, mc.player.bodyYaw));
         Vec3d forward = new Vec3d(-Math.sin(yaw), 0, Math.cos(yaw));
-        Vec3d right = new Vec3d(-Math.cos(yaw), 0, -Math.sin(yaw)); // the player's right
+        Vec3d right = new Vec3d(-Math.cos(yaw), 0, -Math.sin(yaw));
         Vec3d up = new Vec3d(0, 1, 0);
         boolean sneak = mc.player.isInSneakingPose();
-        // Gliding/swimming/crawling tips the body forward around the feet (as vanilla renders it), and the hitbox shrinks,
-        // so anchor to the tilted body instead of the hitbox height. tilt: degrees from upright toward face-down.
         float lean = mc.player.getLeaningPitch(td);
         double tilt = mc.player.isGliding() ? 90 + mc.player.getPitch(td)
             : lean > 0 ? lean * (mc.player.isTouchingWater() ? 90 + mc.player.getPitch(td) : 90) : 0;
@@ -129,7 +126,7 @@ public class Wings extends Module {
             root = Fx.pos(mc.player, td).add(up.multiply(1.8 * 0.76)).add(forward.multiply(-0.26));
         } else {
             root = Fx.pos(mc.player, td).add(0, mc.player.getHeight() * (sneak ? 0.8 : 0.76), 0).add(forward.multiply(sneak ? -0.12 : -0.26));
-            if (sneak) up = up.add(forward.multiply(0.45)).normalize(); // lean with the body
+            if (sneak) up = up.add(forward.multiply(0.45)).normalize();
         }
         Vec3d back = forward.multiply(-1);
         double t = phase;
@@ -141,10 +138,12 @@ public class Wings extends Module {
                 case Dragon -> { sweep = 22; lift = 16 * Math.sin(t * 2.6) + 4; }
                 case Mech -> { sweep = 18; lift = 6 * Math.sin(t * 1.6) + 6; }
                 case Inferno -> { sweep = 20; lift = 10 * Math.sin(t * 2.2) + 6; }
+                case Angel -> { sweep = 18; lift = 18 * Math.sin(t * 2) + 8; }
+                case Butterfly -> { sweep = 8; lift = 38 * Math.sin(t * 5); }
+                case Energy -> { sweep = 24; lift = 5 * Math.sin(t * 1.2) + 4; }
                 default -> { sweep = 26; lift = 12 * Math.sin(t * 2) + 2; }
             }
             double sw = Math.toRadians(sweep), li = Math.toRadians(lift);
-            // span: out to the side, swept back behind you, raised/lowered by the beat
             Vec3d span = out.multiply(Math.cos(sw)).add(back.multiply(Math.sin(sw)));
             Vec3d u = span.multiply(Math.cos(li)).add(up.multiply(Math.sin(li)));
             Vec3d v = up.multiply(Math.cos(li)).subtract(span.multiply(Math.sin(li)));
@@ -156,6 +155,9 @@ public class Wings extends Module {
                 case Mech -> drawMech(event.depthRenderer, f, t);
                 case Inferno -> drawInferno(event.depthRenderer, f, t);
                 case Shadow -> drawShadow(event.depthRenderer, f, t);
+                case Angel -> drawAngel(event.depthRenderer, f, t);
+                case Butterfly -> drawButterfly(event.depthRenderer, f, t);
+                case Energy -> drawEnergy(event.depthRenderer, f, t);
             }
         }
     }
@@ -177,17 +179,18 @@ public class Wings extends Module {
         Vec3d wrist = f.at(DRAGON_WRIST);
         bone(r, f.at(0, 0), wrist, f, 0.05, edge);
         for (int i : DRAGON_TIPS) bone(r, wrist, f.at(DRAGON[i]), f, 0.035, edge);
-        // hooked claw at the wrist
+        tipGlow(r, f, new double[][] {DRAGON[11], DRAGON[14], DRAGON[17], DRAGON[20]}, edge, t);
+        edgeSparks(r, f, DRAGON, 1, 11, edge, t);
         Vec3d c1 = f.at(0.44, 0.72), c2 = f.at(0.52, 0.76);
         r.quad(wrist.x, wrist.y, wrist.z, c1.x, c1.y, c1.z, c2.x, c2.y, c2.z, wrist.x, wrist.y, wrist.z, edge, edge, Fx.alpha(edge, 120), edge);
     }
 
-    // Five sharp blades fanning out, spreading and folding with the beat, each with a glowing power line
     private void drawMech(Renderer3D r, Frame f, double t) {
         Color plate = fill(t), power = edge(t);
         double spread = 0.85 + 0.15 * Math.sin(t * 1.6);
-        for (int k = 0; k < 5; k++) {
-            double ang = Math.toRadians((30 - k * 20) * spread);
+        int blades = low() ? 3 : 5;
+        for (int k = 0; k < blades; k++) {
+            double ang = Math.toRadians((30 - k * 80.0 / (blades - 1)) * spread);
             double len = 1.05 - k * 0.12, w = 0.12 - k * 0.012;
             double dx = Math.cos(ang), dy = Math.sin(ang), nx = -dy, ny = dx;
             double bx = 0.06 * dx, by = 0.06 * dy;
@@ -198,12 +201,12 @@ public class Wings extends Module {
             line(r, a, tip, power);
             line(r, b, c, Fx.alpha(power, power.a * 2 / 3));
             line(r, c, tip, power);
-            line(r, f.at(dx * 0.1, dy * 0.1), f.at(dx * len * 0.9, dy * len * 0.9), power); // power line down the middle
+            line(r, f.at(dx * 0.1, dy * 0.1), f.at(dx * len * 0.9, dy * len * 0.9), power);
+            if (on(tipGlowOn)) glow(r, tip, size.get() * 0.04 * (1 + 0.3 * Math.sin(t * 6 + k)), power);
         }
-        Fx.glow(r, f.at(0.05, 0.02), size.get() * 0.09, power); // reactor at the shoulder
+        glow(r, f.at(0.05, 0.02), size.get() * 0.09, power);
     }
 
-    // Flames: a fan from the shoulder to flickering pointed tongues, white-hot at the root, red at the tips
     private void drawInferno(Renderer3D r, Frame f, double t) {
         int tongues = 9;
         double[][] pts = new double[tongues * 2 + 1][];
@@ -218,7 +221,12 @@ public class Wings extends Module {
         Color core = rainbow.get() ? Fx.hue(Fx.time() * 0.1, 220) : glow(infernoCore.get(), t), tips = fill(t);
         fan(r, f, pts, core, tips);
         outline(r, f, pts, Fx.alpha(edge(t), 200));
-        if (particles.get() && rng.nextInt(3) == 0) {
+        if (on(detailOn)) {
+            double[][] tipPts = new double[tongues][];
+            for (int i = 0; i < tongues; i++) tipPts[i] = pts[i * 2 + 1];
+            tipGlow(r, f, tipPts, tips, t);
+        }
+        if (particles.get() && !low() && rng.nextInt(3) == 0) {
             double[] p = pts[1 + rng.nextInt(tongues) * 2];
             Vec3d e = f.at(p);
             mc.particleManager.addParticle(rng.nextBoolean() ? ParticleTypes.FLAME : ParticleTypes.SMALL_FLAME, e.x, e.y, e.z, 0.0, 0.03, 0.0);
@@ -229,15 +237,110 @@ public class Wings extends Module {
         Color fill = fill(t), edge = edge(t);
         fan(r, f, SHADOW, fill, Fx.alpha(fill, (int) (fill.a * 0.85)));
         outline(r, f, SHADOW, edge);
-        if (particles.get() && rng.nextInt(4) == 0) {
+        tipGlow(r, f, new double[][] {SHADOW[5], SHADOW[7], SHADOW[9], SHADOW[11], SHADOW[13], SHADOW[15], SHADOW[17]}, edge, t);
+        edgeSparks(r, f, SHADOW, 1, 5, edge, t);
+        if (particles.get() && !low() && rng.nextInt(4) == 0) {
             Vec3d e = f.at(SHADOW[1 + rng.nextInt(SHADOW.length - 1)]);
             mc.particleManager.addParticle(ParticleTypes.SMOKE, e.x, e.y, e.z, 0.0, 0.01, 0.0);
         }
     }
 
-    // ---- Primitives ----
+    private void drawAngel(Renderer3D r, Frame f, double t) {
+        Color fill = fill(t), edge = edge(t);
+        int primaries = low() ? 6 : 11;
+        for (int i = 0; i < primaries; i++) {
+            double k = (double) i / (primaries - 1);
+            double ang = Math.toRadians(-95 + k * 55 + 3 * Math.sin(t * 3 + i)), len = 0.45 + k * 0.5;
+            feather(r, f, armU(k), armV(k), ang, len, 0.075, fill, edge, k);
+        }
+        if (on(detailOn)) for (int i = 0; i < 8; i++) {
+            double k = i / 7.0;
+            feather(r, f, 0.05 + k * 0.7, 0.5 + 0.12 * Math.sin(k * Math.PI), Math.toRadians(-100 + k * 45), 0.22 + k * 0.12, 0.06, Fx.alpha(fill, 245), edge, k);
+        }
+        for (int i = 0; i < 10; i++) line(r, f.at(armU(i / 10.0), armV(i / 10.0)), f.at(armU((i + 1) / 10.0), armV((i + 1) / 10.0)), edge);
+        double tipAng = Math.toRadians(-40);
+        tipGlow(r, f, new double[][] {{armU(1) + Math.cos(tipAng) * 0.95, armV(1) + Math.sin(tipAng) * 0.95}}, edge, t);
+    }
 
-    // Filled shape: a fan from the root, one colour at the root blending to another at the edge
+    private static double armU(double k) {
+        return 0.08 + k * 0.82;
+    }
+
+    private static double armV(double k) {
+        return 0.42 + 0.18 * Math.sin(k * Math.PI) - k * 0.1;
+    }
+
+    private void feather(Renderer3D r, Frame f, double bu, double bv, double ang, double len, double w, Color fill, Color edge, double along) {
+        double dx = Math.cos(ang), dy = Math.sin(ang), nx = -dy, ny = dx;
+        Vec3d a = f.at(bu + nx * w, bv + ny * w), b = f.at(bu - nx * w, bv - ny * w);
+        Vec3d c = f.at(bu + dx * len * 0.75 - nx * w * 0.8, bv + dy * len * 0.75 - ny * w * 0.8);
+        Vec3d d = f.at(bu + dx * len * 0.75 + nx * w * 0.8, bv + dy * len * 0.75 + ny * w * 0.8);
+        Vec3d tip = f.at(bu + dx * len, bv + dy * len);
+        Color fc = rainbowAlong(fill, along), soft = Fx.alpha(fc, fc.a * 3 / 4), faint = Fx.alpha(fc, fc.a / 3);
+        r.quad(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z, fc, fc, soft, soft);
+        r.quad(d.x, d.y, d.z, c.x, c.y, c.z, tip.x, tip.y, tip.z, tip.x, tip.y, tip.z, soft, soft, faint, faint);
+        line(r, f.at(bu, bv), tip, Fx.alpha(edge, edge.a * 2 / 3));
+    }
+
+    private static final double[][] BUTTERFLY_UP = {{0, 0}, {0.12, 0.3}, {0.32, 0.62}, {0.62, 0.8}, {0.92, 0.72}, {1.02, 0.45}, {0.82, 0.18}, {0.45, 0.04}};
+    private static final double[][] BUTTERFLY_LOW = {{0, 0}, {0.35, -0.04}, {0.62, -0.22}, {0.66, -0.5}, {0.48, -0.72}, {0.24, -0.62}, {0.06, -0.3}};
+
+    private void drawButterfly(Renderer3D r, Frame f, double t) {
+        Color fill = fill(t), edge = edge(t);
+        for (double[][] lobe : new double[][][] {BUTTERFLY_UP, BUTTERFLY_LOW}) {
+            fan(r, f, lobe, Fx.alpha(fill, Math.min(255, fill.a + 30)), Fx.alpha(fill, fill.a * 2 / 3));
+            outline(r, f, lobe, edge);
+            if (on(detailOn)) for (int i = 2; i < lobe.length - 1; i++) line(r, f.at(0, 0), f.at(lobe[i]), Fx.alpha(edge, edge.a / 3));
+        }
+        double pulse = 1 + 0.25 * Math.sin(t * 4);
+        glow(r, f.at(0.64, 0.5), size.get() * 0.07 * pulse, edge);
+        glow(r, f.at(0.4, -0.42), size.get() * 0.05 * pulse, edge);
+        tipGlow(r, f, new double[][] {BUTTERFLY_UP[4], BUTTERFLY_LOW[4]}, edge, t);
+    }
+
+    private static final double[][] ENERGY = {{0, 0}, {0.18, 0.42}, {0.5, 0.62}, {0.85, 0.55}, {1.05, 0.3}, {0.95, 0.02}, {0.78, -0.22}, {0.52, -0.4}, {0.24, -0.38}};
+    private static final double[] ENERGY_RINGS = {0.35, 0.7, 1};
+
+    private void drawEnergy(Renderer3D r, Frame f, double t) {
+        Color panel = fill(t), lines = edge(t);
+        int n = ENERGY.length;
+        for (int i = 1; i < n - 1; i++) {
+            double[] a = ENERGY[i], b = ENERGY[i + 1];
+            for (int k = 0; k < ENERGY_RINGS.length; k++) {
+                double r0 = k == 0 ? 0 : ENERGY_RINGS[k - 1], r1 = ENERGY_RINGS[k];
+                Vec3d p0 = f.at(a[0] * r0, a[1] * r0), p1 = f.at(a[0] * r1, a[1] * r1), p2 = f.at(b[0] * r1, b[1] * r1), p3 = f.at(b[0] * r0, b[1] * r0);
+                double flick = 0.5 + 0.5 * Math.sin(t * 6 + i * 2.1 + k * 3.7);
+                Color pc = Fx.alpha(rainbowAlong(panel, (double) i / n), (int) (panel.a * (0.5 + flick)));
+                r.quad(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, p3.x, p3.y, p3.z, pc);
+                line(r, p1, p2, Fx.alpha(lines, lines.a * 2 / 3));
+            }
+        }
+        for (int i = 1; i < n; i++) {
+            line(r, f.at(0, 0), f.at(ENERGY[i]), lines);
+            if (on(tipGlowOn)) for (double k : ENERGY_RINGS) glow(r, f.at(ENERGY[i][0] * k, ENERGY[i][1] * k), size.get() * 0.022, lines);
+        }
+        double sweep = (t * 0.6) % 1;
+        for (int i = 1; i < n - 1; i++) {
+            line(r, f.at(ENERGY[i][0] * sweep, ENERGY[i][1] * sweep), f.at(ENERGY[i + 1][0] * sweep, ENERGY[i + 1][1] * sweep), Fx.alpha(lines, (int) (255 * (1 - sweep * 0.6))));
+        }
+        glow(r, f.at(0.02, 0), size.get() * 0.08, lines);
+    }
+
+    private void tipGlow(Renderer3D r, Frame f, double[][] tipPts, Color c, double t) {
+        if (!on(tipGlowOn)) return;
+        for (int i = 0; i < tipPts.length; i++) glow(r, f.at(tipPts[i]), size.get() * 0.05 * (1 + 0.35 * Math.sin(t * 4 + i * 1.3)), c);
+    }
+
+    private void edgeSparks(Renderer3D r, Frame f, double[][] pts, int a, int b, Color c, double t) {
+        if (!on(edgeSparkles)) return;
+        for (int k = 0; k < 2; k++) {
+            double pos = ((t * 0.45 + k * 0.5) % 1) * (b - a);
+            int i = a + (int) pos;
+            Vec3d p = f.at(pts[i]).lerp(f.at(pts[Math.min(b, i + 1)]), pos - Math.floor(pos));
+            spark(r, p, size.get() * 0.09, Fx.alpha(c, 255), false);
+        }
+    }
+
     private void fan(Renderer3D r, Frame f, double[][] pts, Color rootColor, Color edgeColor) {
         Vec3d o = f.at(0, 0);
         int n = pts.length;
@@ -253,7 +356,6 @@ public class Wings extends Module {
         for (int i = 0; i < n; i++) line(r, f.at(pts[i]), f.at(pts[(i + 1) % n]), rainbowAlong(c, (double) i / n));
     }
 
-    // A thick bone: a thin tapered strip between two points, lying in the wing
     private void bone(Renderer3D r, Vec3d a, Vec3d b, Frame f, double width, Color c) {
         Vec3d dir = b.subtract(a);
         Vec3d side = dir.crossProduct(f.back()).normalize().multiply(width * size.get() * 0.5);
@@ -264,8 +366,6 @@ public class Wings extends Module {
     private void line(Renderer3D r, Vec3d a, Vec3d b, Color c) {
         r.line(a.x, a.y, a.z, b.x, b.y, b.z, c);
     }
-
-    // ---- Colours ----
 
     private Color glow(Color c, double t) {
         double k = pulse.get() ? 0.85 + 0.15 * Math.sin(t * 1.7) : 1;
@@ -279,6 +379,9 @@ public class Wings extends Module {
             case Mech -> mechFill.get();
             case Inferno -> infernoTips.get();
             case Shadow -> shadowFill.get();
+            case Angel -> angelFill.get();
+            case Butterfly -> butterflyFill.get();
+            case Energy -> energyFill.get();
         }, t);
     }
 
@@ -289,15 +392,16 @@ public class Wings extends Module {
             case Mech -> mechEdge.get();
             case Inferno -> infernoTips.get();
             case Shadow -> shadowEdge.get();
+            case Angel -> angelEdge.get();
+            case Butterfly -> butterflyEdge.get();
+            case Energy -> energyEdge.get();
         }, t);
     }
 
-    // With rainbow on, the colour flows along the wing's edge
     private Color rainbowAlong(Color c, double along) {
         return rainbow.get() ? Fx.hue(Fx.time() * 0.1 + along * 0.5, c.a) : c;
     }
 
-    // Beat time, running faster while you're in the air
     private void advance() {
         long now = System.nanoTime();
         double dt = last == 0 ? 0 : Math.min(0.1, (now - last) / 1e9);
@@ -306,10 +410,12 @@ public class Wings extends Module {
         phase += dt * speed.get() * (air ? 2 : 1);
     }
 
-    // ---- Halo (drawn by the entity renderer, see LivingEntityRendererMixin) ----
-
     public float time() {
         return (float) phase;
+    }
+
+    public boolean hidesElytra() {
+        return isActive() && hideElytra.get();
     }
 
     public boolean halo() {

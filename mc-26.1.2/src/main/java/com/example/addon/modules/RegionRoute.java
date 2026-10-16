@@ -18,10 +18,6 @@ import meteordevelopment.orbit.EventHandler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 
-/**
- * DonutSMP: guides you to another region (same grid as Glazed's Region Map). Shows which way to turn and how far,
- * and puts a waypoint at the region's centre. See also the .region command.
- */
 public class RegionRoute extends Module {
     private static final String WAYPOINT = "Region route";
 
@@ -78,7 +74,6 @@ public class RegionRoute extends Module {
         float s = scale.get().floatValue();
         int w = 0, lineH = mc.font.lineHeight + 2;
         for (String l : lines) w = Math.max(w, mc.font.width(l));
-        // x/y place the block's centre/top as a percentage of the screen, kept fully on screen
         double sw = ctx.guiWidth() / s, sh = ctx.guiHeight() / s;
         int bx = (int) Math.max(0, Math.min(sw - w, sw * posX.get() / 100 - w / 2.0));
         int by = (int) Math.max(0, Math.min(sh - lineH * lines.length, sh * posY.get() / 100));
@@ -98,7 +93,6 @@ public class RegionRoute extends Module {
         String[] lines;
         if (c == null) lines = new String[]{"Region " + to + " isn't on the DonutSMP map"};
         else {
-            // In the nether your coords are 1/8 of the overworld's, so compare in overworld units
             double scale = mc.level.dimension() == Level.NETHER ? 8 : 1;
             double x = mc.player.getX() * scale, z = mc.player.getZ() * scale;
             int here = DonutRegions.regionAt(x, z);
@@ -116,7 +110,6 @@ public class RegionRoute extends Module {
         return lines;
     }
 
-    /** Points the waypoint at the current target region's centre. */
     public void placeWaypoint() {
         removeWaypoint();
         if (!isActive() || !waypoint.get() || mc.player == null) return;

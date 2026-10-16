@@ -10,8 +10,6 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
 @Mixin(GuiGraphicsExtractor.class)
 public abstract class DrawContextMixin {
-    // Knife replace-items (e.g. your sword) show the knife icon in your hotbar and inventory. The count and
-    // durability bar are drawn separately from the real stack, so they stay correct.
     @ModifyVariable(method = "item(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/level/Level;Lnet/minecraft/world/item/ItemStack;III)V", at = @At("HEAD"), argsOnly = true)
     private ItemStack larper$knifeIcon(ItemStack stack) {
         if (stack.isEmpty() || Modules.get() == null) return stack;

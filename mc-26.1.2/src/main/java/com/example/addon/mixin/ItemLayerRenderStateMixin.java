@@ -18,13 +18,11 @@ import net.minecraft.world.item.ItemDisplayContext;
 
 @Mixin(ItemStackRenderState.LayerRenderState.class)
 public abstract class ItemLayerRenderStateMixin {
-    // Right after the item's display transform, coordinates are model units: apply the knife part's transform there
     @Inject(method = "submit", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/item/ItemStackRenderState$LayerRenderState;applyTransform(Lcom/mojang/blaze3d/vertex/PoseStack$Pose;)V", shift = At.Shift.AFTER))
     private void larper$applyKnifePart(PoseStack matrices, SubmitNodeCollector queue, int light, int overlay, int outline, CallbackInfo ci) {
         if (KnifeRender.partMatrix != null) matrices.last().mulPose(KnifeRender.partMatrix);
     }
 
-    // Hand aura: tint every quad of the first-person held item with the aura color
     @WrapOperation(method = "submit", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/SubmitNodeCollector;submitItem(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/world/item/ItemDisplayContext;III[ILjava/util/List;Lnet/minecraft/client/renderer/item/ItemStackRenderState$FoilType;)V"))
     private void larper$tintItem(SubmitNodeCollector queue, PoseStack matrices, ItemDisplayContext ctx, int light, int overlay, int outline,
                                  int[] tints, List<BakedQuad> quads, ItemStackRenderState.FoilType glint, Operation<Void> original) {

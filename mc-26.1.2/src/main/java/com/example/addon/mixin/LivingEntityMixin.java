@@ -10,7 +10,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityMixin {
-    // Status 60 is the death "poof"; during a cinematic it plays when the body finally goes, not mid-fall
     @Inject(method = "handleEntityEvent", at = @At("HEAD"), cancellable = true)
     private void larper$holdPoof(byte status, CallbackInfo ci) {
         if (status != 60) return;

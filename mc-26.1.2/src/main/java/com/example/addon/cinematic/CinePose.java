@@ -7,17 +7,9 @@ import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 
-/**
- * The death cinematic, as poses over time (seconds):
- *   0.00-0.15  the knife goes in: a jolt and a red flash
- *   0.15-1.10  the victim looks down at the knife, one hand reaching for it
- *   1.10-1.45  the knees give out
- *   1.45-2.05  goes limp and falls face down (side for non-humanoids), with a small bounce
- *   2.05-END   lies still, head rolled to the side
- */
 public final class CinePose {
     public static final float END = 3.2f;
-    public static final float ANGEL_AT = 2.2f; // when a killed player's angel rises out of the body
+    public static final float ANGEL_AT = 2.2f;
 
     private CinePose() {
     }
@@ -27,24 +19,21 @@ public final class CinePose {
         return x * x * (3 - 2 * x);
     }
 
-    // Accelerates like a falling body
     static float fall(float t) {
         float x = Math.max(0, Math.min(1, (t - 1.45f) / 0.6f));
         return x * x;
     }
 
-    /** Head and flags, before the model is posed. */
     public static void state(LivingEntityRenderState s, float t) {
         float look = smooth(0.15f, 0.7f, t) * (1 - smooth(1.3f, 1.9f, t));
         float slump = smooth(1.8f, 2.4f, t);
         s.xRot = 55 * look;
-        s.yRot = 28 * look + 65 * slump; // toward the wound on their right
-        s.deathTime = 0; // our own fall replaces the vanilla tip-over
+        s.yRot = 28 * look + 65 * slump;
+        s.deathTime = 0;
         s.hasRedOverlay = t < 0.15f;
         s.walkAnimationSpeed = 0;
     }
 
-    /** Whole-body motion, right after vanilla's body rotation (origin at the feet, y up, the face toward -z). */
     public static void body(LivingEntityRenderState s, PoseStack m, float t) {
         float jolt = (float) Math.sin(Math.PI * Math.min(1, t / 0.25f)) * 7;
         float hunch = 14 * smooth(0.15f, 0.9f, t);
@@ -56,7 +45,7 @@ public final class CinePose {
             float tilt = jolt - hunch * (1 - f) - 90 * f + bounce;
             m.translate(0, -hip * kneel + 0.13f * f, 0);
             m.translate(0, hip, 0);
-            m.mulPose(Axis.XP.rotationDegrees(tilt)); // negative = top of the body toward the face
+            m.mulPose(Axis.XP.rotationDegrees(tilt));
             m.translate(0, -hip, 0);
         } else {
             m.translate(0, -s.boundingBoxHeight * 0.2f * kneel, 0);
@@ -65,7 +54,6 @@ public final class CinePose {
         }
     }
 
-    /** Arms and legs of humanoids, after the model set its own angles. */
     public static void limbs(HumanoidModel<?> model, float t) {
         float reach = smooth(0.15f, 0.8f, t) * (1 - smooth(1.2f, 1.6f, t));
         float relax = smooth(0.1f, 0.9f, t);
@@ -77,7 +65,6 @@ public final class CinePose {
         set(model.leftLeg, 1.45f * kneel - twitch * 0.6f, -0.05f, -0.04f);
     }
 
-    /** Angel: arms spread, legs together, gently floating. */
     public static void angel(HumanoidModel<?> model, float t) {
         float flap = (float) Math.sin(t * 2.2) * 0.08f;
         set(model.rightArm, 0, 0, 1.15f + flap);

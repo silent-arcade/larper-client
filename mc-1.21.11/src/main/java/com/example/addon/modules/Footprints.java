@@ -1,15 +1,15 @@
 package com.example.addon.modules;
 
-import com.example.addon.AddonTemplate;
+import com.example.addon.visuals.VisualModule;
 import com.example.addon.visuals.Fx;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.BoolSetting;
 import meteordevelopment.meteorclient.settings.ColorSetting;
 import meteordevelopment.meteorclient.settings.DoubleSetting;
+import meteordevelopment.meteorclient.settings.EnumSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
-import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
@@ -18,9 +18,14 @@ import net.minecraft.util.math.Vec3d;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
-/** Glowing footprints left where you walk, fading away behind you. Only you see them. */
-public class Footprints extends Module {
+public class Footprints extends VisualModule {
+    public enum Style { Feet, Paws, Flames }
+
     private final SettingGroup sg = settings.getDefaultGroup();
+
+    private final Setting<Style> style = sg.add(new EnumSetting.Builder<Style>()
+        .name("style").description("Feet: shoe prints. Paws: animal paw prints. Flames: little fires burning where you stepped.")
+        .defaultValue(Style.Feet).build());
 
     private final Setting<Double> duration = sg.add(new DoubleSetting.Builder()
         .name("duration").description("How long a footprint stays (seconds).").defaultValue(4).range(0.5, 30).sliderRange(1, 12).build());
@@ -40,8 +45,13 @@ public class Footprints extends Module {
     private Vec3d lastStep;
     private boolean left;
 
+    private final Setting<Boolean> bloomOn = addBloom();
+    private final Setting<Boolean> glowPatch = feature("glow-patch", "A soft glow under each print.");
+    private final Setting<Boolean> stepPing = feature("step-ping", "A small ring ping as each step lands.");
+    private final Setting<Boolean> embers = feature("embers", "Flames style: the bright tip and flying embers.");
+
     public Footprints() {
-        super(AddonTemplate.CATEGORY, "footprints", "Glowing footprints where you walk. Only you see them.");
+        super("footprints", "Glowing footprints, paw prints or little flames where you walk. Only you see them.");
     }
 
     @Override
@@ -59,7 +69,7 @@ public class Footprints extends Module {
         lastStep = at;
         left = !left;
         prints.add(new Print(at.add(0, 0.015, 0), mc.player.getYaw(), left, Fx.time(), Fx.time() * 0.15));
-        while (prints.size() > 200) prints.poll();
+        while (prints.size() > (low() ? 40 : 200)) prints.poll();
     }
 
     @EventHandler
@@ -73,9 +83,36 @@ public class Footprints extends Module {
             double yaw = Math.toRadians(p.yaw());
             Vec3d fwd = new Vec3d(-Math.sin(yaw), 0, Math.cos(yaw)), side = new Vec3d(-fwd.z, 0, fwd.x);
             Vec3d o = p.pos().add(side.multiply((p.left() ? 0.13 : -0.13) * k));
-            // A sole (long) and a heel (short) pad
-            pad(event, o.add(fwd.multiply(0.07 * k)), fwd, side, 0.075 * k, 0.12 * k, c);
-            pad(event, o.add(fwd.multiply(-0.13 * k)), fwd, side, 0.06 * k, 0.06 * k, c);
+            switch (style.get()) {
+                case Feet -> {
+                    pad(event, o.add(fwd.multiply(0.07 * k)), fwd, side, 0.075 * k, 0.12 * k, c);
+                    pad(event, o.add(fwd.multiply(-0.13 * k)), fwd, side, 0.06 * k, 0.06 * k, c);
+                }
+                case Paws -> {
+                    pad(event, o, fwd, side, 0.07 * k, 0.06 * k, c);
+                    for (int toe = 0; toe < 4; toe++) {
+                        double ta = Math.toRadians(-45 + toe * 30);
+                        Vec3d tp = o.add(fwd.multiply(Math.cos(ta) * 0.12 * k)).add(side.multiply(Math.sin(ta) * 0.12 * k));
+                        pad(event, tp, fwd, side, 0.025 * k, 0.03 * k, c);
+                    }
+                }
+                case Flames -> {
+                    double flick = 0.75 + 0.25 * Math.sin(now * 15 + p.start() * 31);
+                    double h = 0.45 * k * (1 - f) * flick;
+                    Color hot = new Color(255, (int) (60 + 140 * (1 - f)), 20, (int) (240 * (1 - f * f)));
+                    glow(event.renderer, o.add(0, h * 0.4, 0), 0.22 * k * (1 - f * 0.5) * flick, hot);
+                    if (on(embers)) {
+                        glow(event.renderer, o.add(0, h * 0.8, 0), 0.12 * k * flick, new Color(255, 230, 140, (int) (230 * (1 - f))));
+                        if (Math.sin(now * 9 + p.start() * 17) > 0.6) spark(event.renderer, o.add(0, h * 1.3, 0), 0.08 * k, new Color(255, 200, 80, (int) (220 * (1 - f))), true);
+                    }
+                }
+            }
+            if (on(glowPatch)) ring(event.renderer, o, 0, 0.22 * k, 16, u -> Fx.alpha(base, (int) (base.a * 0.18 * (1 - f))));
+            double age = now - p.start();
+            if (on(stepPing) && age < 0.35) {
+                double g = age / 0.35;
+                ring(event.renderer, o.add(0, 0.005, 0), 0.08 * k + 0.25 * k * g, 0.11 * k + 0.25 * k * g, 20, u -> Fx.alpha(base, (int) (base.a * (1 - g))));
+            }
         }
     }
 

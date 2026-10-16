@@ -20,11 +20,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * Plays the user's own sound files (MP3 or WAV) outside Minecraft's sound engine, which only reads OGG.
- * Files are decoded once to 16-bit PCM and cached until they change on disk. Decoding and playback run on
- * background threads so a hit never stutters the game.
- */
 public final class CustomSound {
     public static final String[] EXTENSIONS = {".mp3", ".wav"};
 
@@ -46,10 +41,6 @@ public final class CustomSound {
         return false;
     }
 
-    /**
-     * Length of the file in seconds, or -1 while it's still being decoded (decoding starts in the background on
-     * the first call, so this never stalls the game).
-     */
     public static double duration(Path file) {
         try {
             Pcm pcm = CACHE.get(file);
@@ -63,16 +54,11 @@ public final class CustomSound {
             try {
                 load(file);
             } catch (Exception ignored) {
-                // play() reports problems
             }
         });
         return -1;
     }
 
-    /**
-     * Plays file at volume (0..1) and pitch (playback speed, 1 = normal), starting startSeconds in and playing
-     * at most lengthSeconds (0 = to the end).
-     */
     public static void play(Path file, float volume, float pitch, double startSeconds, double lengthSeconds) {
         PLAYER.execute(() -> {
             try {

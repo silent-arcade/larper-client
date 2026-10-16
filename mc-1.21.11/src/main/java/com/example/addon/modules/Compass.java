@@ -1,6 +1,6 @@
 package com.example.addon.modules;
 
-import com.example.addon.AddonTemplate;
+import com.example.addon.visuals.VisualModule;
 import meteordevelopment.meteorclient.events.render.Render2DEvent;
 import meteordevelopment.meteorclient.settings.BoolSetting;
 import meteordevelopment.meteorclient.settings.ColorSetting;
@@ -8,12 +8,11 @@ import meteordevelopment.meteorclient.settings.IntSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.hud.HudRenderer;
-import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
 
-public class Compass extends Module {
+public class Compass extends VisualModule {
     private static final String[] LABELS = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
 
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -61,8 +60,10 @@ public class Compass extends Module {
     private final Setting<SettingColor> headingColor = sgColors.add(new ColorSetting.Builder()
         .name("heading").description("Color of the heading readout.").defaultValue(new SettingColor(255, 255, 255, 255)).build());
 
+    private double smooth = Double.NaN;
+
     public Compass() {
-        super(AddonTemplate.CATEGORY, "compass", "A stylish compass strip with directions and degrees based on where you're facing.");
+        super("compass", "A stylish compass strip with directions and degrees based on where you're facing.");
     }
 
     @EventHandler
@@ -72,13 +73,14 @@ public class Compass extends Module {
         int w = width.get(), h = height.get();
         double bx = event.screenWidth / 2.0 - w / 2.0 + offsetX.get(), by = offsetY.get(), cx = bx + w / 2.0;
 
-        // Same angle F3 shows: yaw 180 = north, so heading 0 = N, 90 = E, 180 = S, 270 = W
-        double heading = ((mc.player.getYaw() + 180) % 360 + 360) % 360;
+        double target = ((mc.player.getYaw() + 180) % 360 + 360) % 360;
+        if (low() || Double.isNaN(smooth)) smooth = target;
+        else smooth = ((smooth + (((target - smooth) % 360 + 540) % 360 - 180) * 0.25) % 360 + 360) % 360;
+        double heading = smooth;
 
         HudRenderer r = HudRenderer.INSTANCE;
         r.begin(event.drawContext);
 
-        // Background and top/bottom accent lines, fading out toward both ends
         Color bg = bgColor.get(), clear = withAlpha(bg, 0);
         r.quad(bx, by, w / 2.0, h, clear, bg, bg, clear);
         r.quad(cx, by, w / 2.0, h, bg, clear, clear, bg);
@@ -88,7 +90,12 @@ public class Compass extends Module {
         r.quad(bx, by + h - 1, w / 2.0, 1, accClear, acc, acc, accClear);
         r.quad(cx, by + h - 1, w / 2.0, 1, acc, accClear, accClear, acc);
 
-        for (int deg = 0; deg < 360; deg += 5) {
+        if (!low()) {
+            Color glowC = withAlpha(acc, 0.35), glowClear = withAlpha(acc, 0);
+            r.quad(cx - 18, by, 18, h, glowClear, glowC, glowC, glowClear);
+            r.quad(cx, by, 18, h, glowC, glowClear, glowClear, glowC);
+        }
+        for (int deg = 0; deg < 360; deg += low() ? 15 : 5) {
             double px = labelX(deg, heading, w);
             if (Double.isNaN(px)) continue;
             double edge = Math.abs(px - w / 2.0) / (w / 2.0);
@@ -101,7 +108,7 @@ public class Compass extends Module {
                 Color c = deg == 0 ? northColor.get() : cardinal ? cardinalColor.get() : interColor.get();
                 double scale = cardinal ? 1.15 : 0.85;
                 drawCentered(r, label, x, by + (h - r.textHeight(true, scale)) / 2, withAlpha(c, fade), scale);
-            } else if (deg % 15 == 0 && showNumbers.get()) {
+            } else if (deg % 15 == 0 && showNumbers.get() && !low()) {
                 drawCentered(r, String.valueOf(deg), x, by + (h - r.textHeight(true, 0.6)) / 2, withAlpha(numberColor.get(), fade), 0.6);
             } else {
                 double len = h * 0.18;
@@ -111,7 +118,6 @@ public class Compass extends Module {
             }
         }
 
-        // Center pointers (top and bottom) showing where you're looking
         r.triangle(cx - 4, by, cx + 4, by, cx, by + 5, acc);
         r.triangle(cx - 4, by + h, cx, by + h - 5, cx + 4, by + h, acc);
 
@@ -135,9 +141,8 @@ public class Compass extends Module {
         return new Color(c.r, c.g, c.b, (int) (c.a * factor));
     }
 
-    /** Pixel x of a mark inside the strip (180° visible), or NaN if it's off the strip. */
     static double labelX(double labelAngle, double heading, double w) {
-        double delta = ((labelAngle - heading) % 360 + 540) % 360 - 180; // wrap to [-180, 180)
+        double delta = ((labelAngle - heading) % 360 + 540) % 360 - 180;
         return Math.abs(delta) > 90 ? Double.NaN : w / 2 + delta / 180 * w;
     }
 }

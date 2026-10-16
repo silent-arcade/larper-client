@@ -1,5 +1,7 @@
 package com.example.addon.knife;
 
+// Ported from the CS:GO Hands mod by StsThorn, MIT licence.
+
 import com.example.addon.AddonTemplate;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -23,19 +25,13 @@ import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.Identifier;
 
-/**
- * The CS:GO butterfly knife viewmodel (arms included), ported from the CS:GO Hands mod by StsThorn (MIT licence).
- * It is a 20 fps flipbook of pre-rendered 1920x1080 frames drawn over the screen, like the original mod.
- * Frames are cropped, cleaned and stored at half size as JPEG + alpha mask (tools/csgo/Prep.java); only the few around the playhead are decoded,
- * on a background thread, and one texture is reused, so it costs a few MB of memory.
- */
 public final class CsgoViewmodel {
     private final String base;
-    private static final float FPS = 20; // the original mod advances one frame per client tick
+    private static final float FPS = 20;
     private static final int PREFETCH = 6;
     private final Identifier texture;
 
-    private record Frame(int x, int y, int w, int h) {} // where the crop sits in the 1920x1080 frame
+    private record Frame(int x, int y, int w, int h) {}
 
     private final Map<String, Frame[]> anims = new HashMap<>();
     private boolean loaded;
@@ -55,24 +51,20 @@ public final class CsgoViewmodel {
     private Frame shown;
     private int texW, texH;
 
-    /** knife: the frames folder under assets/larper-client/csgo (butterfly, karambit). */
     public CsgoViewmodel(String knife) {
         base = "csgo/" + knife + "/";
         texture = Identifier.fromNamespaceAndPath(KnifeType.NAMESPACE, "csgo_viewmodel_" + knife);
     }
-
-    // ---- Playback ----
 
     public void takeOut() {
         play(randomAnim("takeout"));
     }
 
     public void inspect() {
-        if (anim.startsWith("inspect")) return; // like CS2: pressing again doesn't restart it
+        if (anim.startsWith("inspect")) return;
         play(randomAnim("inspect"));
     }
 
-    // One of this knife's animations starting with prefix (the butterfly has three inspects, the karambit one)
     private String randomAnim(String prefix) {
         load();
         List<String> names = anims.keySet().stream().filter(k -> k.startsWith(prefix)).sorted().toList();
@@ -89,17 +81,13 @@ public final class CsgoViewmodel {
         start = System.nanoTime();
     }
 
-    // Swipes flow into the recovery, everything else back into the idle loop
     private static String next(String finished) {
         return finished.startsWith("swipe") ? "attackrecovery" : "idle";
     }
 
-    // ---- Drawing ----
-
-    /** Draws the current frame. size 1 = the frame fills the screen width (as in CS:GO), anchored bottom-right. */
     public void render(GuiGraphicsExtractor ctx, float size, float inspectSpeed, boolean leftArm) {
         if (!load()) return;
-        if (leftArm != showLeftArm) { // re-decode everything with or without the left arm
+        if (leftArm != showLeftArm) {
             showLeftArm = leftArm;
             for (var f : pending.values()) f.thenAccept(img -> { if (img != null) img.close(); });
             pending.clear();
@@ -121,7 +109,6 @@ public final class CsgoViewmodel {
         m.popMatrix();
     }
 
-    /** Frame index of the current animation, moving on to the next animation when one ends. */
     private int advance(float speed) {
         int length = anims.get(anim).length;
         int index = (int) ((System.nanoTime() - start) / 1e9 * FPS * speed);
@@ -138,9 +125,8 @@ public final class CsgoViewmodel {
             int f = index + i;
             if (loop) fetch(name + "/" + (f % length + 1));
             else if (f < length) fetch(name + "/" + (f + 1));
-            else fetch(then + "/" + (f - length + 1)); // start of what plays next, so the hand-off doesn't pause
+            else fetch(then + "/" + (f - length + 1));
         }
-        // Free decoded frames outside that window (skipped, or left over from an interrupted animation)
         for (Iterator<Map.Entry<String, CompletableFuture<NativeImage>>> it = pending.entrySet().iterator(); it.hasNext(); ) {
             var e = it.next();
             String a = e.getKey().substring(0, e.getKey().indexOf('/'));
@@ -165,7 +151,6 @@ public final class CsgoViewmodel {
         }, decoder));
     }
 
-    // Shows the wanted frame once it's decoded; until then the previous frame stays up, so playback never stalls
     private void upload(String name, int index, Frame frame) {
         String key = name + "/" + (index + 1);
         if (key.equals(shownKey)) return;
@@ -176,7 +161,6 @@ public final class CsgoViewmodel {
         if (img == null) return;
         texW = img.getWidth();
         texH = img.getHeight();
-        // A fresh texture per frame (they differ in size); registering it frees the previous one
         Minecraft.getInstance().getTextureManager().register(texture, new DynamicTexture(() -> "larper csgo viewmodel", img) {
             {
                 sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
@@ -186,15 +170,10 @@ public final class CsgoViewmodel {
         shown = frame;
     }
 
-    /**
-     * Erases the left arm: the separate shape that comes up from the bottom-left of the screen. A shape that also
-     * reaches into the right half (arms touching, or the right arm itself), or high up the screen (probably holding
-     * the knife), is left whole.
-     */
     static void stripLeftArm(NativeImage img, Frame f) {
-        if (f.y() + f.h() < 1078) return; // nothing reaches the bottom of the screen
+        if (f.y() + f.h() < 1078) return;
         int w = img.getWidth(), h = img.getHeight();
-        float k = f.w() / (float) w; // stored pixels -> 1920x1080 pixels
+        float k = f.w() / (float) w;
         int[] px = img.getPixels();
         int[] label = new int[w * h];
         int[] stack = new int[w * h];
@@ -223,14 +202,13 @@ public final class CsgoViewmodel {
             }
             boolean leftSide = f.x() + maxB * k < 1920 * 0.45f;
             boolean low = f.y() + top * k > 1080 * 0.35f;
-            boolean leftHalf = f.x() + right * k < 1920 * 0.5f; // the right arm always reaches past the middle
+            boolean leftHalf = f.x() + right * k < 1920 * 0.5f;
             if (leftSide && low && leftHalf) erase.set(next);
         }
         if (erase.isEmpty()) return;
         for (int i = 0; i < label.length; i++) if (label[i] != 0 && erase.get(label[i])) img.setPixel(i % w, i / w, 0);
     }
 
-    // Each frame is stored as a JPEG (colour) plus a grey PNG (how see-through each pixel is): about half the size
     private NativeImage decode(String key) {
         try (InputStream c = open(base + key + ".jpg"); InputStream a = open(base + key + ".a.png")) {
             java.awt.image.BufferedImage rgb = javax.imageio.ImageIO.read(c), mask = javax.imageio.ImageIO.read(a);

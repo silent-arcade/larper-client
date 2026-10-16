@@ -13,7 +13,6 @@ import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(ArmedEntityRenderState.class)
 public abstract class ArmedEntityRenderStateMixin {
-    // Third person (F5): show the knife in your own main hand. Only your client draws this.
     @WrapOperation(method = "extractArmedEntityRenderState", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;getItemHeldByArm(Lnet/minecraft/world/entity/HumanoidArm;)Lnet/minecraft/world/item/ItemStack;"))
     private static ItemStack larper$knifeInThirdPerson(LivingEntity entity, HumanoidArm arm, Operation<ItemStack> original) {
         ItemStack stack = original.call(entity, arm);

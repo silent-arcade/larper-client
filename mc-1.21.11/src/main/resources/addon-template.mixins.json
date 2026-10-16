@@ -23,7 +23,12 @@
     "HeightRangePlacementModifierAccessor",
     "RarityFilterPlacementModifierAccessor",
     "AbstractClientPlayerEntityMixin",
-    "MinecraftClientAccessor"
+    "MinecraftClientAccessor",
+    "ArmorFeatureRendererMixin",
+    "MouseMixin",
+    "CameraMixin",
+    "FogRendererLarperMixin",
+    "ElytraFeatureRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

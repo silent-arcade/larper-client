@@ -8,7 +8,6 @@ import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 
-/** Crouches and stands up over and over. */
 public class Twerk extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
 
@@ -24,7 +23,7 @@ public class Twerk extends Module {
     private int timer;
 
     public Twerk() {
-        super(AddonTemplate.CATEGORY, "twerk", "Crouches and uncrouches fast.");
+        super(AddonTemplate.AUTOMATION, "twerk", "Crouches and uncrouches fast.");
     }
 
     @Override

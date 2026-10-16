@@ -22,24 +22,25 @@ import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(AvatarRenderer.class)
 public abstract class PlayerEntityRendererMixin {
-
-    // Cinematic Death angels. This runs after the player renderer filled in everything, so nothing overwrites it.
     @Inject(method = "extractRenderState(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V", at = @At("TAIL"))
     private void larper$angel(net.minecraft.world.entity.Avatar entity, net.minecraft.client.renderer.entity.state.AvatarRenderState state, float tickDelta, CallbackInfo ci) {
         if (!(entity instanceof AngelEntity angel) || !(state instanceof HumanoidRenderState b)) return;
-        b.bodyRot = angel.facing; // never turns
+        b.bodyRot = angel.facing;
         b.nameTag = null;
-        b.xRot = -25; // looking up to the sky
+        b.xRot = -25;
         b.yRot = 0;
         b.walkAnimationSpeed = 0;
         b.lightCoords = LightCoordsUtil.FULL_BRIGHT;
         b.outlineColor = 0xFFF2C6;
-        b.chestEquipment = ItemStack.EMPTY; // no armour or elytra over the feathered wings
+        b.chestEquipment = ItemStack.EMPTY;
     }
 
-    // First-person arm: draw it in the aura color
     @WrapOperation(method = "renderHand", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/SubmitNodeCollector;submitModelPart(Lnet/minecraft/client/model/geom/ModelPart;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/rendertype/RenderType;IILnet/minecraft/client/renderer/texture/TextureAtlasSprite;)V"))
     private void larper$tintArm(SubmitNodeCollector queue, ModelPart part, PoseStack matrices, RenderType layer, int light, int overlay, TextureAtlasSprite sprite, Operation<Void> original) {
+        var pm = Modules.get().get(com.example.addon.modules.PlayerModel.class);
+        var avatar = pm == null ? null : pm.firstPersonAvatar();
+        if (avatar != null && ((AvatarRenderer<?>) (Object) this).getModel() instanceof net.minecraft.client.model.HumanoidModel<?> model
+            && avatar.renderArm(matrices, queue, model, part == model.rightArm, light)) return;
         HandAura aura = Modules.get().get(HandAura.class);
         int color = aura == null ? 0 : aura.handColor();
         if (color == 0) original.call(queue, part, matrices, layer, light, overlay, sprite);

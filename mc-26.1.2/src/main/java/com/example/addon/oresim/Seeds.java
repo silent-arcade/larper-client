@@ -10,11 +10,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Properties;
 
-/**
- * World seeds for OreSim. Singleplayer reads the seed straight from the world; for servers you save it with
- * .seed <seed>, stored per server in .minecraft/larper-client/seeds.properties.
- * (Meteor Rejects also tracks the game version per seed via an extra library; OreSim never used it, so it's left out.)
- */
 public final class Seeds {
     private static final Properties SAVED = new Properties();
     private static boolean loaded;
@@ -22,7 +17,6 @@ public final class Seeds {
     private Seeds() {
     }
 
-    /** The seed for the current world, or null if unknown. */
     public static Long get() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.hasSingleplayerServer() && mc.getSingleplayerServer() != null) return mc.getSingleplayerServer().overworld().getSeed();
@@ -44,7 +38,6 @@ public final class Seeds {
         return had;
     }
 
-    // Numbers are used as-is; text seeds hash the same way the game does (https://minecraft.wiki/w/Seed_(level_generation))
     private static long toSeed(String in) {
         try {
             return Long.parseLong(in.strip());

@@ -1,6 +1,6 @@
 package com.example.addon.modules;
 
-import com.example.addon.AddonTemplate;
+import com.example.addon.visuals.VisualModule;
 import meteordevelopment.meteorclient.events.render.Render2DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.gui.GuiTheme;
@@ -13,7 +13,6 @@ import meteordevelopment.meteorclient.settings.IntSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.settings.StringSetting;
-import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.client.gui.Click;
@@ -21,9 +20,8 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 
-/** Speed card: big blocks-per-second number colored by speed, a live graph and your peak. Drag it with "Edit position". */
-public class BPS extends Module {
-    private static final int HISTORY = 60; // 3 seconds of ticks
+public class BPS extends VisualModule {
+    private static final int HISTORY = 60;
     private static final int H_TEXT = 22, H_GRAPH = 16;
 
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -34,7 +32,6 @@ public class BPS extends Module {
     private final Setting<Integer> y = sgGeneral.add(new IntSetting.Builder()
         .name("y").description("Vertical position (or use Edit position).").defaultValue(40).range(0, 4000).sliderRange(0, 600).build());
 
-    // Min 90 so the big number and "max" text don't overlap
     private final Setting<Integer> width = sgGeneral.add(new IntSetting.Builder()
         .name("width").description("Card width (or drag the right edge in Edit position).").defaultValue(110).range(90, 600).sliderRange(90, 300).build());
 
@@ -75,7 +72,6 @@ public class BPS extends Module {
         .name("warning-color").description("Warning text and flashing outline color.").defaultValue(new SettingColor(255, 43, 43))
         .visible(warning::get).build());
 
-    // Warning label position relative to the card (drag it in Edit position)
     private final Setting<Integer> warnDx = sgWarning.add(new IntSetting.Builder()
         .name("warning-x").description("Warning offset from the card (or drag it in Edit position).").defaultValue(30).range(-2000, 2000).sliderRange(-200, 200)
         .visible(warning::get).build());
@@ -91,7 +87,7 @@ public class BPS extends Module {
     private double bps;
 
     public BPS() {
-        super(AddonTemplate.CATEGORY, "bps", "Shows your speed in blocks per second.");
+        super("bps", "Shows your speed in blocks per second.");
     }
 
     @Override
@@ -105,11 +101,10 @@ public class BPS extends Module {
     private void onTick(TickEvent.Post event) {
         if (mc.player == null) return;
         double perTick = Math.hypot(mc.player.getX() - mc.player.lastX, mc.player.getZ() - mc.player.lastZ);
-        bps += (perTick * 20 - bps) * 0.3; // light smoothing so the number doesn't flicker
+        bps += (perTick * 20 - bps) * 0.3;
         history[head] = bps;
         head = (head + 1) % HISTORY;
 
-        // Ping once each time you cross the limit (a little below it resets, so hovering at the limit doesn't spam)
         if (!warning.get()) overLimit = false;
         else if (!overLimit && bps > warnAt.get()) {
             overLimit = true;
@@ -131,16 +126,14 @@ public class BPS extends Module {
     private void draw(DrawContext ctx, int x, int y, boolean showWarning) {
         int h = height(), acc = accent.get().getPacked();
         if (showWarning) {
-            // Flashing outline + label
-            int a = (int) (120 + 135 * (0.5 + 0.5 * Math.sin(System.nanoTime() / 1e9 * 10)));
+            int a = low() ? 200 : (int) (120 + 135 * (0.5 + 0.5 * Math.sin(System.nanoTime() / 1e9 * 10)));
             int col = warnColor.get().getPacked() & 0x00FFFFFF;
             ctx.fill(x - 2, y - 2, x + width.get() + 2, y + h + 2, a << 24 | col);
             ctx.drawTextWithShadow(mc.textRenderer, warnText.get(), x + warnDx.get(), y + warnDy.get(), 0xFF000000 | col);
         }
         ctx.fill(x, y, x + width.get(), y + h, background.get().getPacked());
-        ctx.fill(x, y, x + 2, y + h, acc); // accent bar
+        ctx.fill(x, y, x + 2, y + h, acc);
 
-        // Small label, big number, peak on the right
         ctx.drawTextWithShadow(mc.textRenderer, "BPS", x + 6, y + 4, 0xFFA0A0B0);
         var m = ctx.getMatrices();
         m.pushMatrix();
@@ -154,18 +147,19 @@ public class BPS extends Module {
         ctx.drawTextWithShadow(mc.textRenderer, peakText, x + width.get() - 4 - mc.textRenderer.getWidth(peakText), y + 12, 0xFF808090);
 
         if (!graph.get()) return;
-        // Sparkline: one bar per tick, oldest on the left, scaled to the peak
         int gx = x + 6, gy = y + H_TEXT, gw = this.width.get() - 10, gh = H_GRAPH - 3;
         double top = Math.max(peak, 1);
-        for (int i = 0; i < HISTORY; i++) {
+        int step = low() ? 3 : 1;
+        for (int i = 0; i < HISTORY; i += step) {
             double v = history[(head + i) % HISTORY];
-            int bx0 = gx + i * gw / HISTORY, bx1 = gx + (i + 1) * gw / HISTORY;
+            int bx0 = gx + i * gw / HISTORY, bx1 = gx + Math.min(HISTORY, i + step) * gw / HISTORY;
             int bh = (int) Math.round(v / top * gh);
-            if (bh > 0) ctx.fill(bx0, gy + gh - bh, Math.max(bx1, bx0 + 1), gy + gh, (acc & 0x00FFFFFF) | (0x50 + i * 0xAF / HISTORY) << 24);
+            if (bh <= 0) continue;
+            ctx.fill(bx0, gy + gh - bh, Math.max(bx1, bx0 + 1), gy + gh, (acc & 0x00FFFFFF) | (0x50 + i * 0xAF / HISTORY) << 24);
+            if (!low()) ctx.fill(bx0, gy + gh - bh, Math.max(bx1, bx0 + 1), gy + gh - bh + 1, 0xFFFFFFFF & (acc | 0xFF000000) | 0x00303030);
         }
     }
 
-    // Green (still) -> yellow -> red (red-at and above)
     private int numberColor(double v) {
         if (!speedColor.get()) return 0xFFFFFFFF;
         float t = (float) Math.min(1, v / fastSpeed.get());
@@ -173,7 +167,6 @@ public class BPS extends Module {
         return 0xFF000000 | r << 16 | g << 8 | 0x40;
     }
 
-    /** Drag the card around; Esc saves. */
     private class EditScreen extends Screen {
         private final Screen parent;
         private boolean dragging, draggingWarning, resizing;
@@ -194,12 +187,11 @@ public class BPS extends Module {
         public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
             super.render(ctx, mouseX, mouseY, delta);
             int bx = x.get(), by = y.get();
-            draw(ctx, bx, by, warning.get()); // always preview the warning here so it can be placed
+            draw(ctx, bx, by, warning.get());
             if (warning.get()) {
                 int wx = bx + warnDx.get(), wy = by + warnDy.get();
                 ctx.fill(wx - 2, wy - 2, wx + textRenderer.getWidth(warnText.get()) + 2, wy + textRenderer.fontHeight + 1, draggingWarning ? 0x80A45BFF : 0x40FFFFFF);
             }
-            // Resize grip on the right edge
             int ex = bx + BPS.this.width.get();
             ctx.fill(ex - 2, by, ex + 2, by + height(), resizing || overEdge(mouseX, mouseY) ? 0xFFFFFFFF : 0x80FFFFFF);
             ctx.drawCenteredTextWithShadow(textRenderer, "Drag the BPS card, its warning, or its right edge to resize. Press Esc when done.", width / 2, height / 2, 0xFFFFFFFF);
@@ -216,7 +208,6 @@ public class BPS extends Module {
                 resizing = true;
                 return true;
             }
-            // The warning label sits on top, so it gets the click first
             if (overWarning(click.x(), click.y())) {
                 draggingWarning = true;
                 grabX = click.x() - (x.get() + warnDx.get());

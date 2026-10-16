@@ -10,7 +10,6 @@ import net.minecraft.client.render.entity.model.BipedEntityModel;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
-// Models are posed when the render queue runs, after each model (zombie arms, etc.) set its own angles
 @Mixin(ModelCommandRenderer.class)
 public abstract class ModelCommandRendererMixin {
     @WrapOperation(method = "render(Lnet/minecraft/client/render/command/OrderedRenderCommandQueueImpl$ModelCommand;Lnet/minecraft/client/render/RenderLayer;Lnet/minecraft/client/render/VertexConsumer;Lnet/minecraft/client/render/OutlineVertexConsumerProvider;Lnet/minecraft/client/render/VertexConsumerProvider$Immediate;)V",

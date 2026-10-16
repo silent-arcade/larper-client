@@ -76,4 +76,17 @@ public abstract class LivingEntityRenderStateMixin implements CineState {
     public int larper$haloColor() {
         return larper$haloColor;
     }
+
+    @org.spongepowered.asm.mixin.Unique
+    private boolean larper$self;
+
+    @Override
+    public boolean larper$self() {
+        return larper$self;
+    }
+
+    @Override
+    public void larper$setSelf(boolean self) {
+        larper$self = self;
+    }
 }

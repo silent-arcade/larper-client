@@ -39,18 +39,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-/**
- * Shoot a Flame bow and a rail + TNT minecart appear in the arrow's path, so the burning arrow sets the TNT off.
- *
- * - The arrow's flight is simulated tick by tick with the game's own physics, re-predicted every tick from the live
- *   arrow until the rail is down.
- * - The cart goes at the first spot where the arrow flies through a cart's body (not only where it lands), within
- *   your normal reach.
- * - Auto timing places the cart as late as is safe, a couple of ticks before the arrow gets there.
- * - Aim is server-side only (your camera doesn't move) and moves like a hand: eased, slightly varied, mouse-step sized,
- *   and it turns back to your view afterwards instead of snapping.
- * This places real blocks, so the server sees it.
- */
 public class TntCartAssist extends Module {
     public enum Timing { Auto, Manual }
 
@@ -116,13 +104,13 @@ public class TntCartAssist extends Module {
     private Stage stage = Stage.IDLE;
     private PersistentProjectileEntity arrow;
     private BlockPos railPos;
-    private int impactIn;      // ticks from the shot until the arrow reaches the cart spot
+    private int impactIn;
     private int waited, cartWait, age;
     private float aimYaw, aimPitch;
     private boolean overshot;
 
     public TntCartAssist() {
-        super(AddonTemplate.CATEGORY, "tnt-cart-assist", "Flame bow shot: puts a rail + TNT minecart in the arrow's path.");
+        super(AddonTemplate.AUTOMATION, "tnt-cart-assist", "Flame bow shot: puts a rail + TNT minecart in the arrow's path.");
     }
 
     @Override
@@ -132,7 +120,6 @@ public class TntCartAssist extends Module {
         path.clear();
     }
 
-    // Your own arrow appearing while you hold a Flame bow = a flaming shot
     @EventHandler
     private void onEntityAdded(EntityAddedEvent event) {
         if (mc.player == null || !(event.entity instanceof PersistentProjectileEntity a)) return;
@@ -158,7 +145,7 @@ public class TntCartAssist extends Module {
     @EventHandler
     private void onTick(TickEvent.Pre event) {
         if (mc.player == null || mc.world == null || stage == Stage.IDLE) return;
-        if (++age > 200) { // gave up (moved away, items gone, ...)
+        if (++age > 200) {
             finish();
             return;
         }
@@ -174,7 +161,6 @@ public class TntCartAssist extends Module {
 
     private void tickRail() {
         waited++;
-        // Keep following the live arrow until the rail is down
         if (arrow != null && !arrow.isRemoved()) repredict();
         if (railPos == null || !inReach(railPos)) {
             finish();
@@ -182,21 +168,19 @@ public class TntCartAssist extends Module {
         }
         boolean railThere = mc.world.getBlockState(railPos).getBlock() instanceof AbstractRailBlock;
         Vec3d spot = railSpot();
-        boolean aimed = aim(spot); // aim while waiting, so the placement itself is instant
+        boolean aimed = aim(spot);
         if (!aimed || !timeToPlace()) return;
-        if (railThere) { // a rail is already there: straight to the cart
+        if (railThere) {
             placeCart();
             return;
         }
         if (use(rail(), new BlockHitResult(spot, Direction.UP, railPos.down(), false))) {
             stage = Stage.CART;
             cartWait = cartDelay.get();
-            if (cartWait <= 0) placeCart(); // same tick, right behind the rail
+            if (cartWait <= 0) placeCart();
         } else finish();
     }
 
-    // Same aim as the rail (it's the same spot), and no waiting for the server to confirm the rail: the server handles
-    // our packets in order, so the rail is always there by the time it reads the cart
     private void tickCart() {
         if (!inReach(railPos)) {
             finish();
@@ -217,7 +201,6 @@ public class TntCartAssist extends Module {
         stage = silentAim.get() && smoothReturn.get() ? Stage.RETURN : Stage.IDLE;
     }
 
-    // Manual: fixed delay. Auto: as late as is safe (rail + cart delay + margin before the arrow arrives).
     private boolean timeToPlace() {
         if (timing.get() == Timing.Manual) return waited > delay.get();
         int needed = 1 + cartDelay.get() + margin.get() + pingTicks();
@@ -225,18 +208,14 @@ public class TntCartAssist extends Module {
     }
 
     private Vec3d railSpot() {
-        return Vec3d.ofCenter(railPos.down()).add(0, 0.5, 0); // top face of the block under the rail
+        return Vec3d.ofCenter(railPos.down()).add(0, 0.5, 0);
     }
 
-    // Your ping in ticks (one way there and back), so the cart is on the server before the arrow, even when laggy
     private int pingTicks() {
         var entry = mc.getNetworkHandler() == null ? null : mc.getNetworkHandler().getPlayerListEntry(mc.player.getUuid());
         return entry == null ? 1 : (int) Math.ceil(entry.getLatency() / 50.0) + 1;
     }
 
-    // ---- Prediction ----
-
-    /** Re-simulates the arrow from where it is now and picks the cart spot. False if there's no usable spot. */
     private boolean repredict() {
         Vec3d pos = arrow.getEntityPos(), vel = arrow.getVelocity();
         path.clear();
@@ -247,7 +226,6 @@ public class TntCartAssist extends Module {
             Vec3d next = pos.add(vel);
             BlockHitResult hit = mc.world.raycast(new RaycastContext(pos, next, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player));
             Vec3d end = hit.getType() == HitResult.Type.BLOCK ? hit.getPos() : next;
-            // Where along this tick's flight would the arrow pass through a cart?
             if (intercept.get()) {
                 double len = end.distanceTo(pos);
                 Vec3d dir = len > 1e-6 ? end.subtract(pos).multiply(1 / len) : Vec3d.ZERO;
@@ -266,13 +244,12 @@ public class TntCartAssist extends Module {
             boolean water = !mc.world.getFluidState(BlockPos.ofFloored(pos)).isEmpty();
             vel = vel.multiply(water ? 0.6 : 0.99).add(0, -0.05, 0);
         }
-        if (best == null) return railPos != null; // keep the spot we already have
+        if (best == null) return railPos != null;
         railPos = best;
         impactIn = bestTick + waited;
         return true;
     }
 
-    // A cart standing at the block containing p would be hit (arrow inside the cart's 0.98 x 0.7 body), if it can stand there
     private BlockPos cartAt(Vec3d p) {
         BlockPos c = BlockPos.ofFloored(p);
         double fy = p.y - c.getY(), fx = p.x - c.getX(), fz = p.z - c.getZ();
@@ -280,7 +257,6 @@ public class TntCartAssist extends Module {
         return canHoldCart(c) && inReach(c) ? c : null;
     }
 
-    // It hit something: a rail on top of it, or (a wall) on the ground in front of it
     private BlockPos landingSpot(BlockHitResult hit) {
         BlockPos pos = hit.getSide() == Direction.UP ? hit.getBlockPos().up() : hit.getBlockPos().offset(hit.getSide());
         for (int i = 0; i < 4; i++, pos = pos.down()) {
@@ -296,19 +272,15 @@ public class TntCartAssist extends Module {
         return free && mc.world.getBlockState(below).isSideSolidFullSquare(mc.world, below, Direction.UP);
     }
 
-    // Same reach as your normal clicks (4.5 blocks in survival, 5 in creative): both the block under the rail and the rail
     private boolean inReach(BlockPos rail) {
         return mc.player.canInteractWithBlockAt(rail.down(), 0) && mc.player.canInteractWithBlockAt(rail, 0);
     }
-
-    // ---- Aim ----
 
     private void startAim() {
         aimYaw = silentAim.get() ? Rotations.serverYaw : mc.player.getYaw();
         aimPitch = silentAim.get() ? Rotations.serverPitch : mc.player.getPitch();
     }
 
-    /** One tick of turning toward the spot. True once it's on target. */
     private boolean aim(Vec3d spot) {
         float yaw = (float) Rotations.getYaw(spot), pitch = (float) Rotations.getPitch(spot);
         if (!silentAim.get()) {
@@ -319,11 +291,6 @@ public class TntCartAssist extends Module {
         return turnTo(yaw, pitch, 1.2f);
     }
 
-    /**
-     * Turns the server-side aim part of the way toward yaw/pitch. Humanized: covers 35-60% of what's left each tick
-     * (fast at first, easing in), slight random speed, one small overshoot on big turns that gets corrected, tiny
-     * jitter, and steps rounded to what your mouse sensitivity can actually produce.
-     */
     private boolean turnTo(float yaw, float pitch, float tolerance) {
         float dy = MathHelper.wrapDegrees(yaw - aimYaw), dp = pitch - aimPitch;
         float dist = (float) Math.sqrt(dy * dy + dp * dp);
@@ -353,13 +320,10 @@ public class TntCartAssist extends Module {
         return Math.sqrt(ry * ry + rp * rp) <= tolerance;
     }
 
-    // The smallest turn a real mouse can make at your sensitivity (how the game turns mouse movement into degrees)
     private float mouseStep() {
         double f = mc.options.getMouseSensitivity().getValue() * 0.6 + 0.2;
         return (float) (f * f * f * 8.0 * 0.15);
     }
-
-    // ---- Items ----
 
     private boolean use(FindItemResult item, BlockHitResult hit) {
         if (!item.found() || !InvUtils.swap(item.slot(), true)) return false;
@@ -383,8 +347,6 @@ public class TntCartAssist extends Module {
         }
         return false;
     }
-
-    // ---- Render ----
 
     @EventHandler
     private void onRender(Render3DEvent event) {

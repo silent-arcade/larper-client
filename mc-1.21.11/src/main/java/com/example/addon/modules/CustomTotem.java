@@ -28,16 +28,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 
-/**
- * Your own image as the Totem of Undying: in your hand, in your inventory and in the big pop animation when it
- * saves you, plus an optional sound of your own when it pops. It's a small generated resource pack ("LarperClientTotem") that replaces the totem texture, so it only
- * changes what you see.
- */
 public class CustomTotem extends Module {
     private static final String[] EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif"};
     private static final String PACK_NAME = "LarperClientTotem";
-    private static final int SIZE = 128; // item textures are square; 128px keeps GIFs sharp (HD packs use the same)
-    private static final int MAX_FRAMES = 120; // the game keeps only one frame on the GPU; the strip just sits in memory
+    private static final int SIZE = 128;
+    private static final int MAX_FRAMES = 120;
 
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
 
@@ -51,7 +46,7 @@ public class CustomTotem extends Module {
     private final Setting<String> link = sgGeneral.add(new StringSetting.Builder()
         .name("gif-link").description("Paste a GIF (or image) link to use as the totem. Overrides the image. Leave empty to use the image.")
         .defaultValue("")
-        .onChanged(s -> rebuildIn = isActive() ? 20 : -1) // wait until you stop typing
+        .onChanged(s -> rebuildIn = isActive() ? 20 : -1)
         .build());
 
     private final Setting<String> sound = sgGeneral.add(new ProvidedStringSetting.Builder()
@@ -87,7 +82,7 @@ public class CustomTotem extends Module {
     private boolean packEnabled;
 
     public CustomTotem() {
-        super(AddonTemplate.CATEGORY, "custom-totem", "Your own image as the Totem of Undying. Only you see it.");
+        super(AddonTemplate.VISUAL, "custom-totem", "Your own image as the Totem of Undying. Only you see it.");
     }
 
     @Override
@@ -100,8 +95,6 @@ public class CustomTotem extends Module {
         return list;
     }
 
-    // Your totem popping plays the vanilla sound right where you stand; swap it for yours. Other players' totems
-    // (further away) keep the normal sound.
     @EventHandler
     private void onPlaySound(PlaySoundEvent event) {
         if (mc.player == null || !FileChoices.isFile(sound.get())) return;
@@ -111,7 +104,6 @@ public class CustomTotem extends Module {
         Path file = folder().resolve(sound.get());
         if (!Files.isRegularFile(file) || !CustomSound.isSupported(file)) return;
         event.cancel();
-        // start/end are positions in the file (before the speed change); 0 end or an end before the start = to the end
         double from = start.get(), length = stop.get() > from ? stop.get() - from : 0;
         CustomSound.play(file, volume.get().floatValue() * mc.options.getSoundVolume(SoundCategory.MASTER), speed.get().floatValue(), from, length);
     }
@@ -119,13 +111,12 @@ public class CustomTotem extends Module {
     @Override
     public void onActivate() {
         folder();
-        if (!packEnabled) rebuildIn = 0; // rejoining a world: the totem is still loaded from before
+        if (!packEnabled) rebuildIn = 0;
     }
 
     @Override
     public void onDeactivate() {
         rebuildIn = -1;
-        // Meteor also calls this when you leave a world (module still on); reloading then hangs the game
         if (isActive()) return;
         setPackEnabled(false);
     }
@@ -153,7 +144,6 @@ public class CustomTotem extends Module {
         if (source == null) ChatUtils.info("Downloading totem GIF...");
         CompletableFuture.runAsync(() -> {
             try {
-                // GIFs become an animated item texture: frames stacked top to bottom, timed by a .mcmeta file
                 AnimatedSky.Gif gif = AnimatedSky.decode(source != null ? Files.readAllBytes(source) : AnimatedSky.download(url));
                 int n = Math.min(gif.frames().size(), MAX_FRAMES);
                 BufferedImage strip = new BufferedImage(SIZE, SIZE * n, BufferedImage.TYPE_INT_ARGB);
@@ -168,7 +158,7 @@ public class CustomTotem extends Module {
                 else Files.deleteIfExists(meta);
                 mc.execute(() -> {
                     if (!isActive()) return;
-                    if (packEnabled) GeneratedPacks.safeReload(); // already on: just pick up the new image
+                    if (packEnabled) GeneratedPacks.safeReload();
                     else setPackEnabled(true);
                     ChatUtils.info("Custom totem loaded: %s%s", name, n > 1 ? " (" + n + " frames)" : "");
                 });
@@ -178,7 +168,6 @@ public class CustomTotem extends Module {
         });
     }
 
-    // Minecraft's texture animation: each frame shows for a whole number of ticks (50 ms)
     static String animation(int[] delaysMs, int frames) {
         StringBuilder json = new StringBuilder("{\"animation\":{\"interpolate\":false,\"frames\":[");
         for (int i = 0; i < frames; i++) {
@@ -188,8 +177,6 @@ public class CustomTotem extends Module {
         return json.append("]}}").toString();
     }
 
-    // Fits the image into a SIZE x SIZE square, keeping its shape (transparent around it). Big images shrink in
-    // halving steps: one big bicubic jump skips most pixels and leaves jagged, noisy edges.
     static BufferedImage square(BufferedImage img) {
         double k = (double) SIZE / Math.max(img.getWidth(), img.getHeight());
         int w = Math.max(1, (int) Math.round(img.getWidth() * k)), h = Math.max(1, (int) Math.round(img.getHeight() * k));
@@ -229,7 +216,6 @@ public class CustomTotem extends Module {
         return dir;
     }
 
-    // The setting field isn't assigned yet while its own builder runs, so read it lazily
     private String currentImage() {
         return image == null ? null : image.get();
     }

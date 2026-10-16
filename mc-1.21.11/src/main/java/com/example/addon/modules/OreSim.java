@@ -1,7 +1,6 @@
 package com.example.addon.modules;
 
-// Ported from Meteor Rejects (https://github.com/AntiCope/meteor-rejects, GPL-3.0), modules/OreSim.java,
-// translated from Mojang mappings to Yarn. The Baritone option is left out (Larper Client doesn't ship Baritone).
+// Ported from Meteor Rejects (https://github.com/AntiCope/meteor-rejects), GPL-3.0.
 
 import com.example.addon.AddonTemplate;
 import com.example.addon.oresim.Ore;
@@ -101,7 +100,6 @@ public class OreSim extends Module {
         for (Set<Vec3d> ores : chunk.values()) ores.remove(pos);
     }
 
-    // The ore table depends on the dimension; reload when it changes (respawn, portals)
     @EventHandler
     private void onTick(TickEvent.Pre event) {
         if (mc.world == null) return;
@@ -129,7 +127,6 @@ public class OreSim extends Module {
         oreConfig = null;
     }
 
-    /** Recomputes everything (new seed, new dimension). */
     public void reload() {
         if (!isActive() || mc.world == null) return;
         worldSeed = Seeds.get();
@@ -197,10 +194,6 @@ public class OreSim extends Module {
         List<Ore> ores = oreConfig.get(biome);
         return ores != null ? ores : oreConfig.values().stream().findAny().orElse(List.of());
     }
-
-    // ====================================
-    // Mojang code (ore vein generation)
-    // ====================================
 
     private ArrayList<Vec3d> generateNormal(ClientWorld world, ChunkRandom random, BlockPos blockPos, int veinSize, float discardOnAir) {
         float f = random.nextFloat() * 3.1415927F;

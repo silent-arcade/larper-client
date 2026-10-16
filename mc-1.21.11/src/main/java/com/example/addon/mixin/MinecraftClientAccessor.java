@@ -6,7 +6,6 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 @Mixin(MinecraftClient.class)
 public interface MinecraftClientAccessor {
-    /** Ticks until right-click can use/place again (vanilla sets 4 after each use). */
     @Accessor("itemUseCooldown")
     int larper$getItemUseCooldown();
 

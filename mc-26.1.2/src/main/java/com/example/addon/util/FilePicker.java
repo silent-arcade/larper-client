@@ -15,12 +15,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
-/** "Select file..." and "Open folder" buttons for a module's settings screen. */
 public final class FilePicker {
     private FilePicker() {
     }
 
-    /** Picked files are copied into folder and the setting is set to the copy's name. */
     public static WWidget buttons(GuiTheme theme, String title, Path folder, Setting<String> setting, String... extensions) {
         WHorizontalList list = theme.horizontalList();
         WButton select = list.add(theme.button("Select file...")).widget();
@@ -40,7 +38,6 @@ public final class FilePicker {
         return list;
     }
 
-    // Native OS file dialog (LWJGL tinyfd, shipped with Minecraft)
     private static Path open(String title, String[] extensions) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             PointerBuffer filters = stack.mallocPointer(extensions.length);

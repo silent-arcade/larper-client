@@ -1,15 +1,15 @@
 package com.example.addon.modules;
 
-import com.example.addon.AddonTemplate;
+import com.example.addon.visuals.VisualModule;
 import com.example.addon.visuals.Fx;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.BoolSetting;
 import meteordevelopment.meteorclient.settings.ColorSetting;
 import meteordevelopment.meteorclient.settings.DoubleSetting;
+import meteordevelopment.meteorclient.settings.EnumSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
-import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
@@ -19,9 +19,14 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-/** Shockwave rings that spread across the ground when you jump and when you land. Only you see them. */
-public class JumpRings extends Module {
+public class JumpRings extends VisualModule {
+    public enum Shape { Ring, Hex, Stars }
+
     private final SettingGroup sg = settings.getDefaultGroup();
+
+    private final Setting<Shape> shape = sg.add(new EnumSetting.Builder<Shape>()
+        .name("shape").description("Ring: a round shockwave. Hex: a hexagon. Stars: a five-point star spinning outward.")
+        .defaultValue(Shape.Ring).build());
 
     private final Setting<Boolean> onJump = sg.add(new BoolSetting.Builder()
         .name("on-jump").description("A ring when you jump.").defaultValue(true).build());
@@ -48,8 +53,12 @@ public class JumpRings extends Module {
     private boolean wasOnGround = true;
     private double peakY;
 
+    private final Setting<Boolean> bloomOn = addBloom();
+    private final Setting<Boolean> echoRing = feature("echo-ring", "A second, slower ring following the first.");
+    private final Setting<Boolean> sparksOn = feature("sparks", "Sparks thrown outward with the wave (and twinkles on the star points).");
+
     public JumpRings() {
-        super(AddonTemplate.CATEGORY, "jump-rings", "Shockwave rings when you jump and land. Only you see them.");
+        super("jump-rings", "Shockwave rings, hexagons or stars when you jump and land. Only you see them.");
     }
 
     @Override
@@ -65,7 +74,7 @@ public class JumpRings extends Module {
         if (wasOnGround && !ground && mc.player.getVelocity().y > 0 && onJump.get()) add(0.7);
         if (!wasOnGround && ground && onLand.get()) {
             double fall = Math.max(0, peakY - mc.player.getY());
-            add(Math.min(2.5, 0.8 + fall * 0.25)); // bigger falls, bigger shockwave
+            add(Math.min(2.5, 0.8 + fall * 0.25));
         }
         if (ground) peakY = mc.player.getY();
         wasOnGround = ground;
@@ -73,6 +82,17 @@ public class JumpRings extends Module {
 
     private void add(double scale) {
         rings.add(new Ring(mc.player.getEntityPos().add(0, 0.02, 0), Fx.time(), scale));
+    }
+
+    private void star(Render3DEvent event, Vec3d c, double r, double turn, java.util.function.DoubleFunction<Color> col) {
+        Vec3d prev = null, first = null;
+        for (int k = 0; k <= 10; k++) {
+            double a = turn + Math.PI * 2 * k / 10, rr = k % 2 == 0 ? r : r * 0.45;
+            Vec3d p = c.add(Math.cos(a) * rr, 0, Math.sin(a) * rr);
+            if (prev != null) event.depthRenderer.line(prev.x, prev.y, prev.z, p.x, p.y, p.z, col.apply(k / 10.0));
+            if (k % 2 == 0 && k < 10 && on(sparksOn)) spark(event.depthRenderer, p.add(0, 0.05, 0), 0.15, col.apply(k / 10.0), true);
+            prev = p;
+        }
     }
 
     @EventHandler
@@ -85,11 +105,28 @@ public class JumpRings extends Module {
                 it.remove();
                 continue;
             }
-            double ease = 1 - Math.pow(1 - f, 3); // fast out, slowing down
+            double ease = 1 - Math.pow(1 - f, 3);
             double outer = 0.2 + size.get() * ring.scale() * ease, inner = Math.max(0, outer - 0.12 - 0.25 * (1 - f));
             int alpha = (int) (220 * (1 - f));
             double hueBase = now * 0.2;
-            Fx.ring(event.depthRenderer, ring.pos(), inner, outer, 48, u -> rainbow.get() ? Fx.hue(hueBase + u, alpha) : Fx.alpha(color.get(), (int) (color.get().a * (1 - f))));
+            java.util.function.DoubleFunction<Color> col = u -> rainbow.get() ? Fx.hue(hueBase + u, alpha) : Fx.alpha(color.get(), (int) (color.get().a * (1 - f)));
+            switch (shape.get()) {
+                case Ring -> ring(event.depthRenderer, ring.pos(), inner, outer, 48, col);
+                case Hex -> Fx.ring(event.depthRenderer, ring.pos(), inner, outer, 6, col, false);
+                case Stars -> star(event, ring.pos(), outer, ring.start() * 3 + f * 2, col);
+            }
+            if (on(echoRing) && f > 0.15) {
+                double g = (f - 0.15) / 0.85, o2 = 0.15 + size.get() * ring.scale() * 0.55 * (1 - Math.pow(1 - g, 2));
+                ring(event.depthRenderer, ring.pos().add(0, 0.01, 0), Math.max(0, o2 - 0.07), o2, 36,
+                    u -> rainbow.get() ? Fx.hue(hueBase + 0.5 + u, (int) (140 * (1 - g))) : Fx.alpha(color.get(), (int) (color.get().a * 0.6 * (1 - g))));
+            }
+            if (!on(sparksOn)) continue;
+            int sparks = (int) (6 + 4 * ring.scale());
+            for (int k = 0; k < sparks; k++) {
+                double a = k * Math.PI * 2 / sparks + ring.start() * 7, d = outer * 1.05;
+                Vec3d p = ring.pos().add(Math.cos(a) * d, 0.25 * Math.sin(f * Math.PI) * ring.scale(), Math.sin(a) * d);
+                spark(event.depthRenderer, p, 0.12 * (1 - f), rainbow.get() ? Fx.hue(hueBase + (double) k / sparks, alpha) : Fx.alpha(color.get(), alpha), false);
+            }
         }
     }
 }

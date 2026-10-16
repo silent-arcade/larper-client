@@ -18,6 +18,10 @@ repositories {
         url = uri("https://maven.meteordev.org/snapshots")
     }
     mavenCentral()
+    exclusiveContent {
+        forRepository { maven { url = uri("https://babbaj.github.io/maven/") } }
+        filter { includeGroup("dev.babbaj") }
+    }
 }
 
 dependencies {
@@ -30,6 +34,10 @@ dependencies {
     // compile-only: Fabric API interfaces are injected into some Minecraft classes we call
     compileOnly(libs.fabric.api)
     runtimeOnly(libs.fabric.api) // dev runs only; not bundled
+    // Baritone (LGPL-3.0), bundled inside the addon jar; it already carries nether-pathfinder
+    runtimeOnly("meteordevelopment:baritone:26.1-SNAPSHOT")
+    include("meteordevelopment:baritone:26.1-SNAPSHOT")
+    runtimeOnly("dev.babbaj:nether-pathfinder:1.4.1") // dev runs don't unpack nested jars
 
     // MP3 decoding for custom hit sounds, bundled inside the addon jar
     implementation(libs.jlayer)

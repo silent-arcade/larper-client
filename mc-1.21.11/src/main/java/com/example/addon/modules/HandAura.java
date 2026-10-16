@@ -1,6 +1,6 @@
 package com.example.addon.modules;
 
-import com.example.addon.AddonTemplate;
+import com.example.addon.visuals.VisualModule;
 import com.example.addon.mixin.GameRendererAccessor;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.BoolSetting;
@@ -10,7 +10,6 @@ import meteordevelopment.meteorclient.settings.EnumSetting;
 import meteordevelopment.meteorclient.settings.IntSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
-import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.particle.DustParticleEffect;
@@ -21,11 +20,7 @@ import net.minecraft.util.math.Vec3d;
 
 import java.util.function.Supplier;
 
-/**
- * Colors your first-person hand and held item (rainbow or any color), plus optional particles swirling around
- * the hand in first and third person. Only you see it.
- */
-public class HandAura extends Module {
+public class HandAura extends VisualModule {
     public enum Palette {
         Rainbow(0), Red(0xFF2B2B), Crimson(0xB0102A), Orange(0xFF8A1E), Gold(0xFFC83D), Yellow(0xFFF04A),
         Lime(0x9BFF3A), Green(0x2BD964), Mint(0x7DFFD0), Cyan(0x2BE6FF), Sky(0x6EC6FF), Blue(0x2F6BFF),
@@ -128,10 +123,9 @@ public class HandAura extends Module {
     private int ticks;
 
     public HandAura() {
-        super(AddonTemplate.CATEGORY, "hand-aura", "Colors your hand and weapon, with swirling particles. Only you see it.");
+        super("hand-aura", "Colors your hand and weapon, with swirling particles. Only you see it.");
     }
 
-    /** Current aura color as RGB (animated for Rainbow). */
     public int auraRgb() {
         return switch (palette.get()) {
             case Rainbow -> java.awt.Color.HSBtoRGB((float) ((System.nanoTime() / 1e9 * 0.25 * rainbowSpeed.get()) % 1), 0.75f, 1f) & 0xFFFFFF;
@@ -140,12 +134,10 @@ public class HandAura extends Module {
         };
     }
 
-    /** ARGB tint for the first-person arm, or 0 for none. */
     public int handColor() {
         return isActive() && tintHand.get() ? 0xFF000000 | auraRgb() : 0;
     }
 
-    /** ARGB tint for the first-person held item, or 0 for none. */
     public int itemColor() {
         return isActive() && tintItem.get() ? 0xFF000000 | auraRgb() : 0;
     }
@@ -157,12 +149,10 @@ public class HandAura extends Module {
         if (fp ? !firstPerson.get() : !thirdPerson.get()) return;
 
         float side = mc.player.getMainArm() == Arm.RIGHT ? 1 : -1;
-        Vec3d hand, a, b; // ring center and the two directions spanning the ring's plane
-        double scale = 1; // keeps the first-person aura the same size on screen at any FOV
+        Vec3d hand, a, b;
+        double scale = 1;
 
         if (fp) {
-            // The hand is always drawn with a fixed 70° view, but particles live in the world, which uses your FOV.
-            // Scale the offset so the aura lands on the hand whatever your FOV (and sprint zoom) is.
             var cam = mc.gameRenderer.getCamera();
             float fov = ((GameRendererAccessor) mc.gameRenderer).larper$getFov(cam, 1, true);
             scale = Math.tan(Math.toRadians(fov / 2)) / Math.tan(Math.toRadians(35));
@@ -173,7 +163,6 @@ public class HandAura extends Module {
             a = right;
             b = up;
         } else {
-            // Third person: beside the body at hand height; ring lies flat around the hand
             double yaw = Math.toRadians(mc.player.bodyYaw);
             Vec3d forward = new Vec3d(-Math.sin(yaw), 0, Math.cos(yaw));
             Vec3d right = new Vec3d(-Math.cos(yaw), 0, -Math.sin(yaw));
@@ -183,65 +172,62 @@ public class HandAura extends Module {
             b = forward;
         }
 
-        Vec3d c = a.crossProduct(b).normalize(); // third axis of the aura's local frame
+        Vec3d c = a.crossProduct(b).normalize();
 
         ticks++;
-        int n = density.get();
+        int n = detail(density.get(), 3);
         double spd = speed.get();
         double r = radius.get() * scale * (pulse.get() ? 1 + 0.25 * Math.sin(ticks * 0.2) : 1);
         double spin = ticks * 0.25 * spd;
 
         for (int i = 0; i < n; i++) {
             double t = (double) i / n;
-            double u, v, w; // position in the local frame (a, b, c)
+            double u, v, w;
             switch (shape.get()) {
                 case Ring -> {
                     double ang = spin + t * Math.PI * 2;
                     u = Math.cos(ang) * r; v = Math.sin(ang) * r; w = 0;
                 }
                 case Helix -> {
-                    // Two strands twisting up along the hand
                     double ang = spin * 2 + (i % 2) * Math.PI;
                     double h = ((ticks * 0.08 * spd + (i / 2) * 0.15) % 1) * 2 - 1;
                     u = Math.cos(ang + h * 3) * r; v = h * r * 1.6; w = Math.sin(ang + h * 3) * r;
                 }
                 case Atom -> {
-                    // Three orbits tilted 60° apart
                     int k = i % 3;
                     double tilt = k * Math.PI / 3, ang = spin * 1.5 + t * Math.PI * 2 + k;
                     u = Math.cos(ang) * r * Math.cos(tilt); v = Math.sin(ang) * r; w = Math.cos(ang) * r * Math.sin(tilt);
                 }
                 case Vortex -> {
-                    // A funnel spiralling upward, wide at the bottom
                     double h = (t + ticks * 0.05 * spd) % 1;
                     double rr = r * (1.3 - h), ang = spin * 2 + h * 8 + i;
                     u = Math.cos(ang) * rr; v = (h * 2 - 1) * r * 1.4; w = Math.sin(ang) * rr;
                 }
                 default -> {
-                    // Sparkle: random points inside a ball
                     Vec3d d = randomDir().multiply(r * Math.cbrt(Math.random()));
                     u = d.x; v = d.y; w = d.z;
                 }
             }
             Vec3d pos = hand.add(a.multiply(u)).add(b.multiply(v)).add(c.multiply(w));
-            // Drift around the aura's axis so it keeps swirling between spawns
             Vec3d tangent = a.multiply(-v).add(b.multiply(u));
             Vec3d vel = tangent.lengthSquared() < 1e-9 ? Vec3d.ZERO : tangent.normalize().multiply(0.006 * spd);
             spawn(effect(t), pos, vel);
         }
 
-        // Burst outward at the start of every swing
         boolean swinging = mc.player.handSwinging;
         if (swingBurst.get() && swinging && !wasSwinging) {
-            for (int i = 0; i < 24; i++) spawn(effect(i / 24.0), hand, randomDir().multiply(0.06 + Math.random() * 0.06));
+            int ringN = detail(24, 8);
+            for (int i = 0; i < ringN; i++) {
+                double ang = Math.PI * 2 * i / ringN;
+                spawn(effect((double) i / ringN), hand, a.multiply(Math.cos(ang)).add(b.multiply(Math.sin(ang))).multiply(0.12));
+            }
+            if (!low()) for (int i = 0; i < 10; i++) spawn(effect(i / 10.0), hand, randomDir().multiply(0.04 + Math.random() * 0.06));
         }
         wasSwinging = swinging;
     }
 
     private boolean wasSwinging;
 
-    // Particle with a fixed velocity and lifetime, so the shape stays crisp instead of drifting randomly.
-    // Client-side only: the particle manager just draws it locally, nothing is sent to the server.
     private void spawn(ParticleEffect effect, Vec3d pos, Vec3d vel) {
         net.minecraft.client.particle.Particle p = mc.particleManager.addParticle(effect, pos.x, pos.y, pos.z, 0, 0, 0);
         if (p == null) return;
@@ -249,7 +235,6 @@ public class HandAura extends Module {
         p.setMaxAge(lifetime.get());
     }
 
-    // offset 0..1 = position in the aura; with a rainbow gradient each particle gets its own hue
     private ParticleEffect effect(double offset) {
         if (particle.get() != Particle.Dust) return particle.get().effect.get();
         int rgb = palette.get() == Palette.Rainbow && gradient.get()

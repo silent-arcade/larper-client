@@ -7,7 +7,9 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 
 @Mixin(GameRenderer.class)
 public interface GameRendererAccessor {
-    /** The world's current field of view in degrees, including sprint/speed effects. */
     @Invoker("getFov")
     float larper$getFov(Camera camera, float tickProgress, boolean changingFov);
+
+    @Invoker("setPostProcessor")
+    void larper$setPostProcessor(net.minecraft.util.Identifier id);
 }

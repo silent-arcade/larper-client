@@ -1,6 +1,6 @@
 package com.example.addon.modules;
 
-import com.example.addon.AddonTemplate;
+import com.example.addon.visuals.VisualModule;
 import com.example.addon.visuals.Fx;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.settings.BoolSetting;
@@ -10,20 +10,18 @@ import meteordevelopment.meteorclient.settings.EnumSetting;
 import meteordevelopment.meteorclient.settings.IntSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
-import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.util.math.Vec3d;
 
-/** Glowing orbs circling around you, each with a fading trail. Only you see them. */
-public class OrbitOrbs extends Module {
-    public enum Style { Ring, Atom, Helix }
+public class OrbitOrbs extends VisualModule {
+    public enum Style { Ring, Atom, Helix, Planets }
 
     private final SettingGroup sg = settings.getDefaultGroup();
 
     private final Setting<Style> style = sg.add(new EnumSetting.Builder<Style>()
-        .name("style").description("Ring: one flat circle. Atom: each orb on its own tilted orbit. Helix: orbs spiral up and down.")
+        .name("style").description("Ring: one flat circle. Atom: tilted orbits. Helix: spiralling up and down. Planets: each at its own distance, with a ring and a moon.")
         .defaultValue(Style.Atom).build());
 
     private final Setting<Integer> count = sg.add(new IntSetting.Builder()
@@ -51,8 +49,13 @@ public class OrbitOrbs extends Module {
     private final Setting<Boolean> firstPerson = sg.add(new BoolSetting.Builder()
         .name("first-person").description("Also show them in first person (they swing past your view).").defaultValue(true).build());
 
+    private final Setting<Boolean> bloomOn = addBloom();
+    private final Setting<Boolean> cometBeads = feature("comet-beads", "Glowing beads along each orb's trail.");
+    private final Setting<Boolean> pulseOn = feature("pulse", "Orbs gently swell and shrink.");
+    private final Setting<Boolean> planetRings = feature("planet-rings", "Planets style: a ring and a moon on each planet.");
+
     public OrbitOrbs() {
-        super(AddonTemplate.CATEGORY, "orbit-orbs", "Glowing orbs orbiting around you. Only you see them.");
+        super("orbit-orbs", "Glowing orbs (or little planets) orbiting around you. Only you see them.");
     }
 
     @EventHandler
@@ -60,27 +63,45 @@ public class OrbitOrbs extends Module {
         if (mc.player == null || (!firstPerson.get() && mc.options.getPerspective().isFirstPerson())) return;
         Vec3d base = Fx.pos(mc.player, event.tickDelta).add(0, mc.player.getHeight() * 0.55, 0);
         double t = Fx.time();
-        int n = count.get();
+        int n = count.get(), tl = low() ? trail.get() / 3 : trail.get();
         for (int i = 0; i < n; i++) {
             Color c = rainbow.get() ? Fx.hue(t * 0.08 + (double) i / n, 220) : color.get();
-            // trail first (oldest, faintest), then the orb on top
-            for (int k = trail.get(); k > 0; k--) {
+            for (int k = tl; k > 0; k--) {
                 Vec3d a = orbit(i, n, t - k * 0.02), b = orbit(i, n, t - (k - 1) * 0.02);
-                int alpha = (int) (c.a * (1 - (double) k / (trail.get() + 1)) * 0.8);
-                event.depthRenderer.line(base.x + a.x, base.y + a.y, base.z + a.z, base.x + b.x, base.y + b.y, base.z + b.z, Fx.alpha(c, alpha));
+                double fade = 1 - (double) k / (tl + 1);
+                event.depthRenderer.line(base.x + a.x, base.y + a.y, base.z + a.z, base.x + b.x, base.y + b.y, base.z + b.z, Fx.alpha(c, (int) (c.a * fade * 0.8)));
+                if (on(cometBeads) && k % 3 == 0) glow(event.depthRenderer, base.add(a), size.get() * 0.55 * fade, Fx.alpha(c, (int) (c.a * fade * 0.6)));
             }
-            Fx.glow(event.depthRenderer, base.add(orbit(i, n, t)), size.get(), c);
+            double pulse = on(pulseOn) ? 1 + 0.18 * Math.sin(t * 5 + i * 1.3) : 1;
+            Vec3d at = base.add(orbit(i, n, t));
+            glow(event.depthRenderer, at, size.get() * pulse, c);
+            if (style.get() == Style.Planets && on(planetRings)) planet(event, at, i, t, c);
         }
     }
 
-    // Offset of orb i (of n) from your centre at time t
+    private void planet(Render3DEvent event, Vec3d at, int i, double t, Color c) {
+        double rr = size.get() * 2.2, tilt = 0.5 + i * 0.3;
+        int segs = 24;
+        for (int k = 0; k < segs; k++) {
+            double a0 = Math.PI * 2 * k / segs, a1 = Math.PI * 2 * (k + 1) / segs;
+            Vec3d p0 = at.add(Math.cos(a0) * rr, Math.sin(a0) * rr * Math.sin(tilt) * 0.4, Math.sin(a0) * rr * Math.cos(tilt));
+            Vec3d p1 = at.add(Math.cos(a1) * rr, Math.sin(a1) * rr * Math.sin(tilt) * 0.4, Math.sin(a1) * rr * Math.cos(tilt));
+            event.depthRenderer.line(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, Fx.alpha(c, c.a * 2 / 3));
+        }
+        double ma = t * 4 + i;
+        spark(event.depthRenderer, at.add(Math.cos(ma) * rr * 1.4, Math.sin(ma * 0.7) * rr * 0.5, Math.sin(ma) * rr * 1.4), size.get() * 0.9, Fx.alpha(c, 255), true);
+    }
+
     private Vec3d orbit(int i, int n, double t) {
         double r = radius.get(), phase = (double) i / n * Math.PI * 2, a = t * speed.get() * Math.PI * 2 + phase;
         return switch (style.get()) {
             case Ring -> new Vec3d(Math.cos(a) * r, Math.sin(t * 2 + phase) * 0.06, Math.sin(a) * r);
             case Helix -> new Vec3d(Math.cos(a) * r, Math.sin(a * 0.5 + phase) * 0.8, Math.sin(a) * r);
+            case Planets -> {
+                double pr = r * (0.55 + 0.6 * i / Math.max(1, n - 1)), pa = t * speed.get() * Math.PI * 2 * (1.6 - 0.8 * i / Math.max(1, n - 1)) + phase;
+                yield new Vec3d(Math.cos(pa) * pr, 0.05 * Math.sin(t + i), Math.sin(pa) * pr);
+            }
             case Atom -> {
-                // a circle tilted by a different amount for each orb, its tilt slowly turning
                 double tilt = Math.PI / n * i + 0.5, turn = phase + t * 0.2;
                 double x = Math.cos(a) * r, z = Math.sin(a) * r;
                 double y = z * Math.sin(tilt);

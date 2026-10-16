@@ -19,13 +19,11 @@ import java.util.List;
 
 @Mixin(ItemRenderState.LayerRenderState.class)
 public abstract class ItemLayerRenderStateMixin {
-    // Right after the item's display transform, coordinates are model units: apply the knife part's transform there
     @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/model/json/Transformation;apply(ZLnet/minecraft/client/util/math/MatrixStack$Entry;)V", shift = At.Shift.AFTER))
     private void larper$applyKnifePart(MatrixStack matrices, OrderedRenderCommandQueue queue, int light, int overlay, int outline, CallbackInfo ci) {
         if (KnifeRender.partMatrix != null) matrices.peek().multiplyPositionMatrix(KnifeRender.partMatrix);
     }
 
-    // Hand aura: tint every quad of the first-person held item with the aura color
     @WrapOperation(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;submitItem(Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/item/ItemDisplayContext;III[ILjava/util/List;Lnet/minecraft/client/render/RenderLayer;Lnet/minecraft/client/render/item/ItemRenderState$Glint;)V"))
     private void larper$tintItem(OrderedRenderCommandQueue queue, MatrixStack matrices, ItemDisplayContext ctx, int light, int overlay, int outline,
                                  int[] tints, List<BakedQuad> quads, RenderLayer layer, ItemRenderState.Glint glint, Operation<Void> original) {

@@ -1,6 +1,6 @@
 package com.example.addon.modules;
 
-import com.example.addon.AddonTemplate;
+import com.example.addon.visuals.VisualModule;
 import com.example.addon.visuals.Fx;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.settings.BoolSetting;
@@ -9,20 +9,18 @@ import meteordevelopment.meteorclient.settings.DoubleSetting;
 import meteordevelopment.meteorclient.settings.EnumSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
-import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.util.math.Vec3d;
 
-/** A rotating rune circle under your feet: glowing rings, rune marks, spokes and orbiting beads (no star shapes). */
-public class MagicCircle extends Module {
-    public enum Design { Runes, Sun, Ripples, Gear, Portal }
+public class MagicCircle extends VisualModule {
+    public enum Design { Runes, Sun, Ripples, Gear, Portal, Hexagram, Clock }
 
     private final SettingGroup sg = settings.getDefaultGroup();
 
     private final Setting<Design> design = sg.add(new EnumSetting.Builder<Design>()
-        .name("design").description("Runes: rings and rune marks. Sun: rays. Ripples: pulsing rings. Gear: a turning cog. Portal: a swirl.")
+        .name("design").description("Runes, Sun (rays), Ripples, Gear (a cog), Portal (a swirl), Hexagram (a six-point star) or Clock (ticking hands).")
         .defaultValue(Design.Runes).build());
 
     private final Setting<Double> radius = sg.add(new DoubleSetting.Builder()
@@ -43,8 +41,13 @@ public class MagicCircle extends Module {
     private final Setting<SettingColor> accentColor = sg.add(new ColorSetting.Builder()
         .name("accent-color").description("Spokes and beads.").defaultValue(new SettingColor(255, 200, 90, 230)).visible(() -> !rainbow.get()).build());
 
+    private final Setting<Boolean> bloomOn = addBloom();
+    private final Setting<Boolean> groundGlow = feature("ground-glow", "A faint glow pooled under the circle.");
+    private final Setting<Boolean> glyphs = feature("rising-glyphs", "Sparks drifting up out of the circle.");
+    private final Setting<Boolean> pointGlow = feature("point-glows", "Glows on the star points and clock centre.");
+
     public MagicCircle() {
-        super(AddonTemplate.CATEGORY, "magic-circle", "A rotating circle under your feet: runes, sun, ripples, gear or portal. Only you see it.");
+        super("magic-circle", "A rotating circle under your feet: runes, sun, ripples, gear, portal, hexagram or clock. Only you see it.");
     }
 
     @EventHandler
@@ -58,26 +61,35 @@ public class MagicCircle extends Module {
         Color ringP = Fx.alpha(ring, (int) (ring.a * pulse));
 
         Color accentP = Fx.alpha(accent, (int) (accent.a * pulse));
+        if (on(groundGlow)) ring(event.renderer, c.add(0, -0.005, 0), 0, R * 1.05, 40, u -> Fx.alpha(ring, ring.a / 7));
+        if (on(glyphs)) {
+            for (int k = 0; k < 8; k++) {
+                double life = (now * 0.6 + k / 8.0) % 1, a = k * 2.4 + Math.floor(now * 0.6 + k / 8.0) * 1.7;
+                Vec3d p = c.add(Math.cos(a) * R * 0.75, life * 1.6, Math.sin(a) * R * 0.75);
+                spark(event.renderer, p, 0.1 * (1 - life), Fx.alpha(k % 2 == 0 ? ring : accent, (int) (230 * (1 - life))), false);
+            }
+        }
         switch (design.get()) {
             case Runes -> runes(event, c, R, turn, ringP, accentP);
             case Sun -> sun(event, c, R, turn, now, ringP, accentP);
             case Ripples -> ripples(event, c, R, now, ring, accentP);
             case Gear -> gear(event, c, R, turn, ringP, accentP);
             case Portal -> portal(event, c, R, turn, now, ring, accent);
+            case Hexagram -> hexagram(event, c, R, turn, now, ringP, accentP);
+            case Clock -> clock(event, c, R, now, ringP, accentP);
         }
     }
 
-    // Rings with rune marks turning one way, spokes and diamond beads turning the other
     private void runes(Render3DEvent event, Vec3d c, double R, double turn, Color ringP, Color accentP) {
-        Fx.ring(event.renderer, c, R * 0.93, R, 64, u -> ringP);
-        Fx.ring(event.renderer, c, R * 0.80, R * 0.83, 64, u -> Fx.alpha(ringP, ringP.a * 3 / 4));
-        Fx.ring(event.renderer, c, R * 0.30, R * 0.33, 40, u -> ringP);
+        ring(event.renderer, c, R * 0.93, R, 64, u -> ringP);
+        ring(event.renderer, c, R * 0.80, R * 0.83, 64, u -> Fx.alpha(ringP, ringP.a * 3 / 4));
+        ring(event.renderer, c, R * 0.30, R * 0.33, 40, u -> ringP);
         for (int i = 0; i < 24; i++) {
             double a = -turn * 0.6 + Math.PI * 2 * i / 24;
             line(event, c, a, R * 0.845, a, R * (i % 3 == 0 ? 0.92 : 0.89), ringP);
             if (i % 3 == 0) line(event, c, a - 0.06, R * 0.885, a + 0.06, R * 0.885, ringP);
         }
-        Fx.ring(event.renderer, c, R * 0.55, R * 0.57, 48, u -> Fx.alpha(accentP, accentP.a * 2 / 3));
+        ring(event.renderer, c, R * 0.55, R * 0.57, 48, u -> Fx.alpha(accentP, accentP.a * 2 / 3));
         for (int k = 0; k < 12; k++) {
             double a = turn + k * Math.PI / 6;
             line(event, c, a, R * 0.33, a, R * (k % 2 == 0 ? 0.8 : 0.55), Fx.alpha(accentP, accentP.a / 2));
@@ -85,11 +97,10 @@ public class MagicCircle extends Module {
         for (int k = 0; k < 6; k++) diamond(event, c, -turn * 1.5 + k * Math.PI / 3 + Math.PI / 6, R * 0.68, R * 0.06, accentP);
     }
 
-    // A glowing core with long and short rays that flicker in length
     private void sun(Render3DEvent event, Vec3d c, double R, double turn, double now, Color ringP, Color accentP) {
-        Fx.ring(event.renderer, c, 0, R * 0.28, 40, u -> accentP);
-        Fx.ring(event.renderer, c, R * 0.28, R * 0.42, 40, u -> Fx.alpha(accentP, 0)); // soft edge (fades out)
-        Fx.ring(event.renderer, c, R * 0.33, R * 0.36, 40, u -> ringP);
+        ring(event.renderer, c, 0, R * 0.28, 40, u -> accentP);
+        ring(event.renderer, c, R * 0.28, R * 0.42, 40, u -> Fx.alpha(accentP, 0));
+        ring(event.renderer, c, R * 0.33, R * 0.36, 40, u -> ringP);
         int rays = 16;
         for (int k = 0; k < rays; k++) {
             double a = turn + Math.PI * 2 * k / rays, len = (k % 2 == 0 ? 1.0 : 0.72) * (0.9 + 0.1 * Math.sin(now * 4 + k));
@@ -99,20 +110,18 @@ public class MagicCircle extends Module {
         }
     }
 
-    // Rings that spread from your feet and fade, one after another
     private void ripples(Render3DEvent event, Vec3d c, double R, double now, Color ring, Color accentP) {
         for (int i = 0; i < 4; i++) {
             double f = (now * 0.5 + i / 4.0) % 1, r = R * f;
             int a = (int) (ring.a * (1 - f));
-            Fx.ring(event.renderer, c, Math.max(0, r - 0.05 - 0.06 * (1 - f)), r, 56, u -> Fx.alpha(ring, a));
+            ring(event.renderer, c, Math.max(0, r - 0.05 - 0.06 * (1 - f)), r, 56, u -> Fx.alpha(ring, a));
         }
-        Fx.ring(event.renderer, c, R * 0.12, R * 0.16, 32, u -> accentP);
+        ring(event.renderer, c, R * 0.12, R * 0.16, 32, u -> accentP);
     }
 
-    // A cog: a rim with square teeth and spokes, turning
     private void gear(Render3DEvent event, Vec3d c, double R, double turn, Color ringP, Color accentP) {
-        Fx.ring(event.renderer, c, R * 0.70, R * 0.80, 64, u -> ringP);
-        Fx.ring(event.renderer, c, R * 0.16, R * 0.24, 32, u -> ringP);
+        ring(event.renderer, c, R * 0.70, R * 0.80, 64, u -> ringP);
+        ring(event.renderer, c, R * 0.16, R * 0.24, 32, u -> ringP);
         int teeth = 12;
         for (int k = 0; k < teeth; k++) {
             double a = turn + Math.PI * 2 * k / teeth, w = Math.PI / teeth * 0.5;
@@ -126,10 +135,9 @@ public class MagicCircle extends Module {
         }
     }
 
-    // A swirl: curved arms spiralling into the middle, darkening toward the centre
     private void portal(Render3DEvent event, Vec3d c, double R, double turn, double now, Color ring, Color accent) {
-        Fx.ring(event.renderer, c, R * 0.94, R, 64, u -> ring);
-        int arms = 5, steps = 24;
+        ring(event.renderer, c, R * 0.94, R, 64, u -> ring);
+        int arms = 5, steps = detail(24, 8);
         for (int arm = 0; arm < arms; arm++) {
             for (int s = 0; s < steps; s++) {
                 double f0 = (double) s / steps, f1 = (double) (s + 1) / steps;
@@ -139,7 +147,42 @@ public class MagicCircle extends Module {
                 event.renderer.line(at(c, a0, r0).x, c.y, at(c, a0, r0).z, at(c, a1, r1).x, c.y, at(c, a1, r1).z, c0, c1);
             }
         }
-        Fx.ring(event.renderer, c, 0, R * 0.12, 24, u -> Fx.alpha(accent, (int) (accent.a * (0.6 + 0.4 * Math.sin(now * 3)))));
+        ring(event.renderer, c, 0, R * 0.12, 24, u -> Fx.alpha(accent, (int) (accent.a * (0.6 + 0.4 * Math.sin(now * 3)))));
+    }
+
+    private void hexagram(Render3DEvent event, Vec3d c, double R, double turn, double now, Color ringP, Color accentP) {
+        ring(event.renderer, c, R * 0.95, R, 64, u -> ringP);
+        ring(event.renderer, c, R * 0.86, R * 0.88, 64, u -> Fx.alpha(ringP, ringP.a / 2));
+        for (int tri = 0; tri < 2; tri++) {
+            double base = turn * (tri == 0 ? 1 : -1) + tri * Math.PI / 3;
+            for (int k = 0; k < 3; k++) {
+                double a0 = base + k * Math.PI * 2 / 3, a1 = base + (k + 1) * Math.PI * 2 / 3;
+                line(event, c, a0, R * 0.86, a1, R * 0.86, tri == 0 ? ringP : accentP);
+                line(event, c, a0 + 0.01, R * 0.84, a1 + 0.01, R * 0.84, Fx.alpha(tri == 0 ? ringP : accentP, 120));
+                Vec3d tip = at(c, a0, R * 0.86);
+                ring(event.renderer, tip, R * 0.07, R * 0.085, 20, u -> accentP);
+                if (on(pointGlow)) glow(event.renderer, tip.add(0, 0.05, 0), R * 0.06 * (1 + 0.3 * Math.sin(now * 4 + k + tri)), accentP);
+            }
+        }
+        ring(event.renderer, c, R * 0.36, R * 0.38, 40, u -> ringP);
+        for (int k = 0; k < 6; k++) diamond(event, c, -turn * 2 + k * Math.PI / 3, R * 0.25, R * 0.04, accentP);
+    }
+
+    private void clock(Render3DEvent event, Vec3d c, double R, double now, Color ringP, Color accentP) {
+        ring(event.renderer, c, R * 0.92, R, 64, u -> ringP);
+        for (int h = 0; h < 12; h++) {
+            double a = h * Math.PI / 6;
+            line(event, c, a, R * (h % 3 == 0 ? 0.72 : 0.8), a, R * 0.88, h % 3 == 0 ? accentP : ringP);
+            if (h % 3 == 0) diamond(event, c, a, R * 0.66, R * 0.035, accentP);
+        }
+        double minute = Math.floor(now * 2) / 2 * Math.PI / 6;
+        double hour = now * Math.PI / 36;
+        Vec3d mTip = at(c, minute, R * 0.82), hTip = at(c, hour, R * 0.5);
+        event.renderer.line(c.x, c.y, c.z, mTip.x, c.y, mTip.z, accentP);
+        event.renderer.line(c.x, c.y + 0.001, c.z, hTip.x, c.y, hTip.z, ringP);
+        for (int k = 1; k <= 3; k++) line(event, c, minute - k * 0.035, R * 0.8, minute - k * 0.035, R * 0.82, Fx.alpha(accentP, accentP.a / (k + 1)));
+        ring(event.renderer, c, 0, R * 0.08, 20, u -> accentP);
+        if (on(pointGlow)) glow(event.renderer, c.add(0, 0.05, 0), R * 0.12, accentP);
     }
 
     private void diamond(Render3DEvent event, Vec3d c, double a, double r, double d, Color color) {
@@ -151,7 +194,6 @@ public class MagicCircle extends Module {
         return new Vec3d(c.x + Math.cos(angle) * r, c.y, c.z + Math.sin(angle) * r);
     }
 
-    // A straight line between two points given as (angle, radius) around the centre
     private void line(Render3DEvent event, Vec3d c, double a0, double r0, double a1, double r1, Color color) {
         event.renderer.line(c.x + Math.cos(a0) * r0, c.y, c.z + Math.sin(a0) * r0, c.x + Math.cos(a1) * r1, c.y, c.z + Math.sin(a1) * r1, color);
     }

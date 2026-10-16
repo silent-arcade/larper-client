@@ -12,7 +12,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(AbstractClientPlayerEntity.class)
 public abstract class AbstractClientPlayerEntityMixin {
-    // Skin Changer: swap only your own skin (third person, first-person hand, inventory)
     @Inject(method = "getSkin()Lnet/minecraft/entity/player/SkinTextures;", at = @At("RETURN"), cancellable = true)
     private void larper$skin(CallbackInfoReturnable<SkinTextures> cir) {
         if ((Object) this != MinecraftClient.getInstance().player) return;

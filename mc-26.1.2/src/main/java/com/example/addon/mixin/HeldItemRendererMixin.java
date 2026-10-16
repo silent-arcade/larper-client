@@ -26,8 +26,6 @@ public abstract class HeldItemRendererMixin {
     @Unique
     private boolean larper$renderingParts;
 
-
-    // Knife slot selected (and really empty), or holding a replace-item -> draw the knife instead
     @ModifyVariable(method = "renderArmWithItem", at = @At("HEAD"), argsOnly = true)
     private ItemStack larper$swapInKnife(ItemStack stack, @Local(argsOnly = true) InteractionHand hand) {
         if (hand != InteractionHand.MAIN_HAND) return stack;
@@ -36,7 +34,6 @@ public abstract class HeldItemRendererMixin {
         return knife.shouldHold() ? knife.stack() : stack;
     }
 
-    // The butterfly is drawn as the CS:GO viewmodel on the HUD instead, so nothing goes in the main hand
     @Inject(method = "renderArmWithItem", at = @At("HEAD"), cancellable = true)
     private void larper$hideForViewmodel(net.minecraft.client.player.AbstractClientPlayer player, float tickProgress, float pitch, InteractionHand hand, float swingProgress, ItemStack item, float equipProgress, PoseStack matrices, SubmitNodeCollector queue, int light, CallbackInfo ci) {
         if (hand != InteractionHand.MAIN_HAND) return;
@@ -44,12 +41,10 @@ public abstract class HeldItemRendererMixin {
         if (knife != null && knife.showsViewmodel()) ci.cancel();
     }
 
-    // Draw each knife part with the animated pose
     @Inject(method = "renderItem(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/item/ItemDisplayContext;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;I)V", at = @At("HEAD"), cancellable = true)
     private void larper$renderKnife(LivingEntity entity, ItemStack stack, ItemDisplayContext ctx, PoseStack matrices, SubmitNodeCollector queue, int light, CallbackInfo ci) {
-        // Hand aura color for the first-person held item, never the knife (cleared at RETURN, or below when the knife takes over)
         HandAura aura = Modules.get().get(HandAura.class);
-        HandTint.itemColor = ctx.firstPerson() && aura != null && !KnifeType.isKnife(stack) ? aura.itemColor() : 0;
+        HandTint.itemColor = ctx.firstPerson() && aura != null && !KnifeType.isKnife(stack) && !stack.is(net.minecraft.world.item.Items.TOTEM_OF_UNDYING) ? aura.itemColor() : 0;
 
         if (larper$renderingParts || !ctx.firstPerson() || !KnifeType.isKnife(stack)) return;
         Knife knife = Modules.get().get(Knife.class);
@@ -59,7 +54,6 @@ public abstract class HeldItemRendererMixin {
         float[] pose = knife.pose();
         boolean left = ctx == ItemDisplayContext.FIRST_PERSON_LEFT_HAND;
         Knife.applyHandPose(matrices, pose, left);
-
 
         larper$renderingParts = true;
         try {

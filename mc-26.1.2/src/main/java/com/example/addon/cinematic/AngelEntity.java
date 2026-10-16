@@ -9,13 +9,8 @@ import net.minecraft.client.player.RemotePlayer;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.world.entity.player.Player;
 
-/**
- * A client-only copy of a killed player wearing their skin, rising into the sky as an angel.
- * It has its own random UUID so it never clashes with the real player when they respawn; the skin comes from
- * the real player's tab-list entry.
- */
 public class AngelEntity extends RemotePlayer {
-    public static final int LIFE = 140; // ticks
+    public static final int LIFE = 140;
     private static int nextId = -2_000_000;
 
     private final PlayerInfo entry;
@@ -41,7 +36,6 @@ public class AngelEntity extends RemotePlayer {
         return entry;
     }
 
-    // Not driven by the server: just float up, faster and faster, trailing light
     @Override
     public void tick() {
         life++;
@@ -52,7 +46,6 @@ public class AngelEntity extends RemotePlayer {
         double speed = 0.015 + life * 0.0035;
         setPos(getX(), getY() + speed, getZ());
         var particles = Minecraft.getInstance().particleEngine;
-        // Light trailing from both wingtips, and the odd feather drifting down
         double yaw = Math.toRadians(facing);
         double rx = -Math.cos(yaw), rz = -Math.sin(yaw), bx = Math.sin(yaw), bz = -Math.cos(yaw);
         for (int side = -1; side <= 1; side += 2) {

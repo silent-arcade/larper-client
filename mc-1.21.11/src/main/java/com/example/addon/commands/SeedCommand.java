@@ -8,7 +8,6 @@ import meteordevelopment.meteorclient.commands.Command;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import net.minecraft.command.CommandSource;
 
-/** .seed (show), .seed <seed> (save for this server), .seed delete. Used by OreSim. */
 public class SeedCommand extends Command {
     public SeedCommand() {
         super("seed", "Get or set the seed of the current world (for OreSim).");

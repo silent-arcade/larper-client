@@ -8,12 +8,6 @@ import meteordevelopment.meteorclient.commands.Command;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import net.minecraft.command.CommandSource;
 
-/**
- * DonutSMP region routes:
- *   .region            which region you're in
- *   .region <to>       from where you are to that region (also points the Region Route module at it)
- *   .region <from> <to> from one region's centre to another's
- */
 public class RegionCommand extends Command {
     public RegionCommand() {
         super("region", "DonutSMP: route to another region, e.g. .region 5 or .region 28 5");

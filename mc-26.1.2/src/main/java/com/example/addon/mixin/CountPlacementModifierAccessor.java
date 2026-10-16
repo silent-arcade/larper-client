@@ -5,7 +5,6 @@ import net.minecraft.world.level.levelgen.placement.CountPlacement;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-// OreSim reads how many ore veins a feature places per chunk
 @Mixin(CountPlacement.class)
 public interface CountPlacementModifierAccessor {
     @Accessor("count")

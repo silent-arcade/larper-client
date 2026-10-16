@@ -20,11 +20,6 @@ import net.minecraft.world.entity.projectile.FireworkRocketEntity;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.Fireworks;
 
-/**
- * Elytra flight on autopilot: holds the height you pick by steering your pitch, and boosts with firework rockets
- * from your hotbar (it switches to them while you fly and back to your item when you land). Auto mode fires the next rocket as soon as the last one's
- * boost has ended; Timed mode fires on a fixed delay. Above your height it stops boosting and glides down to it.
- */
 public class AutoFirework extends Module {
     public enum Mode { Auto, Timed }
 
@@ -54,14 +49,14 @@ public class AutoFirework extends Module {
         .defaultValue(true).build());
 
     private final java.util.Random rng = new java.util.Random();
-    private FireworkRocketEntity rocket; // the boost we're riding (Auto mode)
+    private FireworkRocketEntity rocket;
     private int reaction = -1, nextDelay;
-    private int heldBefore = -1; // your slot before we switched to the rockets, restored when you land
+    private int heldBefore = -1;
     private int sinceFired = 1000, rocketLife;
     private boolean watching;
 
     public AutoFirework() {
-        super(AddonTemplate.CATEGORY, "auto-firework", "Elytra autopilot: fireworks from your hotbar, holding a set height.");
+        super(AddonTemplate.AUTOMATION, "auto-firework", "Elytra autopilot: fireworks from your hotbar, holding a set height.");
     }
 
     @Override
@@ -80,14 +75,13 @@ public class AutoFirework extends Module {
     private void onTick(TickEvent.Pre event) {
         if (mc.player == null || !mc.player.isFallFlying()) {
             rocket = null;
-            restoreSlot(); // landed: back to what you were holding
+            restoreSlot();
             return;
         }
         sinceFired++;
         double y = mc.player.getY(), target = height.get();
 
         if (steer.get()) {
-            // Climb when below, dive gently when above, level out near the height. Negative pitch = nose up.
             float want = (float) Mth.clamp((y - target) * 2.5, -maxPitch.get(), maxPitch.get() * 0.6);
             float step = (want - mc.player.getXRot()) * 0.15f;
             if (humanize.get()) {
@@ -96,12 +90,11 @@ public class AutoFirework extends Module {
             mc.player.setXRot(mc.player.getXRot() + step);
         }
 
-        if (y > target + 2) return; // above the height: glide down to it, no boost
+        if (y > target + 2) return;
         if (!ready()) {
             reaction = -1;
             return;
         }
-        // A person reacts a moment after the boost runs out, not on the exact tick
         if (humanize.get() && mode.get() == Mode.Auto) {
             if (reaction < 0) reaction = 2 + rng.nextInt(6);
             if (reaction-- > 0) return;
@@ -110,7 +103,6 @@ public class AutoFirework extends Module {
         FindItemResult rockets = InvUtils.findInHotbar(Items.FIREWORK_ROCKET);
         if (!rockets.found()) return;
         rocketLife = maxLife(mc.player.getInventory().getItem(rockets.slot()).get(DataComponents.FIREWORKS));
-        // Switch to the rockets once and stay on them while flying (no swapping back and forth every rocket)
         int selected = mc.player.getInventory().getSelectedSlot();
         if (selected != rockets.slot()) {
             if (heldBefore < 0) heldBefore = selected;
@@ -127,9 +119,8 @@ public class AutoFirework extends Module {
 
     private boolean ready() {
         if (mode.get() == Mode.Timed) return sinceFired >= Math.max(1, nextDelay);
-        if (sinceFired < 3) return false; // give the rocket a moment to show up
-        if (rocket != null) return rocket.isRemoved(); // its boost has ended
-        // Never saw our rocket (e.g. the server hid it): fall back to the longest it can last
+        if (sinceFired < 3) return false;
+        if (rocket != null) return rocket.isRemoved();
         return !watching || sinceFired > rocketLife;
     }
 
@@ -138,7 +129,6 @@ public class AutoFirework extends Module {
         heldBefore = -1;
     }
 
-    // The rocket that appears on you right after firing is the one boosting you
     @EventHandler
     private void onEntityAdded(EntityAddedEvent event) {
         if (!watching || mc.player == null || sinceFired > 10 || !(event.entity instanceof FireworkRocketEntity r)) return;
@@ -147,7 +137,6 @@ public class AutoFirework extends Module {
         watching = false;
     }
 
-    // Longest a rocket boosts for: 10 * (duration + 1) ticks plus up to 11 random ticks
     private static int maxLife(Fireworks fireworks) {
         int duration = fireworks == null ? 1 : fireworks.flightDuration();
         return 10 * (duration + 1) + 11;

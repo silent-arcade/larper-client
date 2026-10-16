@@ -1,16 +1,16 @@
 package com.example.addon.modules;
 
-import com.example.addon.AddonTemplate;
+import com.example.addon.visuals.VisualModule;
 import com.example.addon.visuals.Fx;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.BoolSetting;
 import meteordevelopment.meteorclient.settings.ColorSetting;
 import meteordevelopment.meteorclient.settings.DoubleSetting;
+import meteordevelopment.meteorclient.settings.EnumSetting;
 import meteordevelopment.meteorclient.settings.IntSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
-import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
@@ -20,9 +20,14 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 
-/** A glowing ribbon that follows behind you as you move, fading out at its tail. Only you see it. */
-public class Trail extends Module {
+public class Trail extends VisualModule {
+    public enum Style { Ribbon, Comet, Lightning }
+
     private final SettingGroup sg = settings.getDefaultGroup();
+
+    private final Setting<Style> style = sg.add(new EnumSetting.Builder<Style>()
+        .name("style").description("Ribbon: a glowing band. Comet: a tail of glowing beads. Lightning: a crackling bolt following you.")
+        .defaultValue(Style.Ribbon).build());
 
     private final Setting<Integer> length = sg.add(new IntSetting.Builder()
         .name("length").description("How long the trail is, in ticks of movement (20 = 1 second).").defaultValue(24).range(4, 100).sliderRange(5, 60).build());
@@ -42,8 +47,13 @@ public class Trail extends Module {
 
     private final ArrayDeque<Vec3d> points = new ArrayDeque<>();
 
+    private final Setting<Boolean> bloomOn = addBloom();
+    private final Setting<Boolean> edgeLines = feature("edge-lines", "Ribbon: bright lines along both edges.");
+    private final Setting<Boolean> twinkles = feature("twinkles", "Little stars twinkling off the trail (and the comet's head flare).");
+    private final Setting<Boolean> doubleStrand = feature("double-strand", "Lightning: a second faint strand beside the bolt.");
+
     public Trail() {
-        super(AddonTemplate.CATEGORY, "trail", "A glowing ribbon trailing behind you. Only you see it.");
+        super("trail", "A glowing ribbon, comet tail or lightning bolt trailing behind you. Only you see it.");
     }
 
     @Override
@@ -51,7 +61,6 @@ public class Trail extends Module {
         points.clear();
     }
 
-    // Only grows while you move; standing still lets it shrink away
     @EventHandler
     private void onTick(TickEvent.Post event) {
         if (mc.player == null) return;
@@ -61,13 +70,16 @@ public class Trail extends Module {
         while (points.size() > length.get()) points.pollFirst();
     }
 
-    // A ribbon that always turns its face to the camera (like trails in games), so it never disappears edge-on
     @EventHandler
     private void onRender(Render3DEvent event) {
         if (mc.player == null || points.size() < 2) return;
         List<Vec3d> list = new ArrayList<>(points);
-        list.add(Fx.pos(mc.player, event.tickDelta)); // reach all the way to you this frame
+        list.add(Fx.pos(mc.player, event.tickDelta));
         double t = Fx.time(), half = height.get() / 2, lift = offset.get() + half;
+        if (style.get() != Style.Ribbon) {
+            drawStyle(event, list, t, lift, half);
+            return;
+        }
         Vec3d cam = mc.gameRenderer.getCamera().getCameraPos();
         int n = list.size();
         Vec3d[] lo = new Vec3d[n], hi = new Vec3d[n];
@@ -76,19 +88,56 @@ public class Trail extends Module {
             Vec3d dir = list.get(Math.min(n - 1, i + 1)).subtract(list.get(Math.max(0, i - 1)));
             Vec3d side = dir.crossProduct(cam.subtract(p));
             side = side.lengthSquared() < 1e-8 ? new Vec3d(0, 1, 0) : side.normalize();
-            double w = half * (0.35 + 0.65 * i / (n - 1)); // thin at the tail, full at you
+            double w = half * (0.35 + 0.65 * i / (n - 1));
             lo[i] = p.subtract(side.multiply(w));
             hi[i] = p.add(side.multiply(w));
         }
+        int prev = 0;
         for (int i = 1; i < n; i++) {
-            Color ca = shade(i - 1, n, t), cb = shade(i, n, t);
-            Vec3d a0 = lo[i - 1], a1 = hi[i - 1], b0 = lo[i], b1 = hi[i];
+            if (low() && i % 2 == 1 && i != n - 1) continue;
+            int p = prev;
+            prev = i;
+            Color ca = shade(p, n, t), cb = shade(i, n, t);
+            Vec3d a0 = lo[p], a1 = hi[p], b0 = lo[i], b1 = hi[i];
             event.depthRenderer.quad(a0.x, a0.y, a0.z, a1.x, a1.y, a1.z, b1.x, b1.y, b1.z, b0.x, b0.y, b0.z, ca, ca, cb, cb);
-            event.depthRenderer.line(a1.x, a1.y, a1.z, b1.x, b1.y, b1.z, Fx.alpha(ca, Math.min(255, ca.a + 60)));
+            if (on(edgeLines)) {
+                event.depthRenderer.line(a1.x, a1.y, a1.z, b1.x, b1.y, b1.z, Fx.alpha(ca, Math.min(255, ca.a + 60)));
+                event.depthRenderer.line(a0.x, a0.y, a0.z, b0.x, b0.y, b0.z, Fx.alpha(ca, Math.min(255, ca.a + 30)));
+            }
+            if (!on(twinkles)) continue;
+            double tw = Math.sin(t * 7 + i * 2.39);
+            if (tw > 0.75) spark(event.depthRenderer, i % 2 == 0 ? a1 : a0, 0.09 * (tw - 0.75) * 4, Fx.alpha(cb, Math.min(255, cb.a + 50)), false);
         }
     }
 
-    // Fades from clear at the tail to full at you
+    private void drawStyle(Render3DEvent event, List<Vec3d> list, double t, double lift, double half) {
+        int n = list.size();
+        if (style.get() == Style.Comet) {
+            int step = low() ? 3 : 1;
+            for (int i = n - 1; i >= 0; i -= step) {
+                double f = (double) i / (n - 1);
+                Color c = shade(i, n, t);
+                glow(event.depthRenderer, list.get(i).add(0, lift, 0), half * (0.25 + 0.75 * f), c);
+            }
+            if (on(twinkles)) spark(event.depthRenderer, list.get(n - 1).add(0, lift, 0), half * 1.6, Fx.alpha(shade(n - 1, n, t), 255), false);
+            return;
+        }
+        java.util.Random r = new java.util.Random((long) (t * 15));
+        Vec3d prev = null;
+        for (int i = 0; i < n; i++) {
+            double f = (double) i / (n - 1), jag = half * 0.6 * (i == n - 1 ? 0 : 1);
+            Vec3d p = list.get(i).add((r.nextDouble() - 0.5) * jag, lift + (r.nextDouble() - 0.5) * jag, (r.nextDouble() - 0.5) * jag);
+            if (prev != null) {
+                Color c = shade(i, n, t);
+                event.depthRenderer.line(prev.x, prev.y, prev.z, p.x, p.y, p.z, Fx.alpha(c, Math.min(255, c.a + 80)));
+                if (on(doubleStrand)) event.depthRenderer.line(prev.x + 0.03, prev.y + 0.03, prev.z, p.x + 0.03, p.y + 0.03, p.z, Fx.alpha(c, c.a / 2));
+                if (on(twinkles) && r.nextInt(6) == 0) spark(event.depthRenderer, p, 0.12 * f, c, true);
+            }
+            prev = p;
+        }
+        glow(event.depthRenderer, list.get(n - 1).add(0, lift, 0), half * 0.6, Fx.alpha(shade(n - 1, n, t), 230));
+    }
+
     private Color shade(int i, int n, double t) {
         double f = (double) i / (n - 1);
         Color c = rainbow.get() ? Fx.hue(t * 0.15 - f * 0.6, 200) : color.get();

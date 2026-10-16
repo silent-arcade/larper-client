@@ -12,7 +12,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(InGameHud.class)
 public abstract class InGameHudMixin {
-    // CS:GO butterfly viewmodel: drawn first so the hotbar, crosshair and chat stay on top of it
     @Inject(method = "render", at = @At("HEAD"))
     private void larper$drawViewmodel(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
         Knife knife = Modules.get().get(Knife.class);
@@ -25,14 +24,12 @@ public abstract class InGameHudMixin {
         if (knife == null) return;
         for (int i = 0; i < 9; i++) {
             if (!knife.showsInHotbar(i)) continue;
-            // Same position vanilla uses for hotbar items
             int x = context.getScaledWindowWidth() / 2 - 90 + i * 20 + 2;
             int y = context.getScaledWindowHeight() - 16 - 3;
             context.drawItem(knife.stack(), x, y);
         }
     }
 
-    // Custom Crosshair draws its own, so hide the vanilla one while it's on
     @Inject(method = "renderCrosshair(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", at = @At("HEAD"), cancellable = true)
     private void larper$hideCrosshair(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
         var cc = Modules.get().get(com.example.addon.modules.CustomCrosshair.class);

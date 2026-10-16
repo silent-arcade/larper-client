@@ -9,7 +9,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/** Small resource packs this addon writes into the resourcepacks folder (custom sky, custom totem) and switches on/off. */
 public final class GeneratedPacks {
     private GeneratedPacks() {
     }
@@ -18,7 +17,6 @@ public final class GeneratedPacks {
         return Minecraft.getInstance().getResourcePackDirectory().resolve(name);
     }
 
-    /** Creates the pack folder with a pack.mcmeta for this game version. */
     public static Path create(String name, String description) throws IOException {
         Path pack = dir(name);
         Files.createDirectories(pack);
@@ -29,7 +27,6 @@ public final class GeneratedPacks {
         return pack;
     }
 
-    /** Turns the pack on or off, saves the pack list and reloads resources (when it's safe). */
     public static void setEnabled(String name, boolean on) {
         Minecraft mc = Minecraft.getInstance();
         String id = "file/" + name;
@@ -37,29 +34,24 @@ public final class GeneratedPacks {
         packs.reload();
         boolean changed = on ? packs.addPack(id) : packs.removePack(id);
         if (!changed) {
-            // Already on from last session: its files were just rewritten, so reload anyway or the old image stays
             if (on) safeReload();
             return;
         }
-        // Save the pack list ourselves: GameOptions.refreshResourcePacks() also reloads resources on its own
         if (on && !mc.options.resourcePacks.contains(id)) mc.options.resourcePacks.add(id);
         if (!on) mc.options.resourcePacks.remove(id);
         mc.options.save();
         safeReload();
     }
 
-    // Reloading while leaving a world (or while another reload runs) leaves the game stuck on the Mojang
-    // loading screen. Outside a world the pack change is saved and simply applies on the next resource load.
     public static void safeReload() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || !mc.isRunning()) return;
         if (mc.getOverlay() == null) mc.reloadResourcePacks();
-        else reloadQueued = true; // another reload is running (e.g. sky and totem loading together): run ours after it
+        else reloadQueued = true;
     }
 
     private static boolean reloadQueued;
 
-    /** Call every tick: runs a reload that had to wait for another one to finish. */
     public static void tick() {
         if (reloadQueued && Minecraft.getInstance().getOverlay() == null) {
             reloadQueued = false;

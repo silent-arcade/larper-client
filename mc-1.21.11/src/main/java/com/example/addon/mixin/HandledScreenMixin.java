@@ -33,14 +33,12 @@ public abstract class HandledScreenMixin {
         if (knife != null && knife.isActive() && knife.isOnCursor()) context.drawItem(knife.stack(), mouseX - 8, mouseY - 8);
     }
 
-    // Clicks on the knife are handled locally and never reach the server
     @Inject(method = "onMouseClick(Lnet/minecraft/screen/slot/Slot;IILnet/minecraft/screen/slot/SlotActionType;)V", at = @At("HEAD"), cancellable = true)
     private void larper$clickKnife(Slot slot, int slotId, int button, SlotActionType action, CallbackInfo ci) {
         Knife knife = Modules.get().get(Knife.class);
         if (knife != null && knife.onSlotClick(slot, action)) ci.cancel();
     }
 
-    // Drag-and-drop: releasing over another slot puts the knife there
     @Inject(method = "mouseReleased", at = @At("HEAD"), cancellable = true)
     private void larper$releaseKnife(Click click, CallbackInfoReturnable<Boolean> cir) {
         Knife knife = Modules.get().get(Knife.class);

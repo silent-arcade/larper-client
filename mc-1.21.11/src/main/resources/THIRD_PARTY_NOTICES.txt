@@ -1,0 +1,3 @@
+This jar bundles Baritone (https://github.com/cabaletta/baritone, Meteor build: https://github.com/MeteorDevelopment/baritone),
+unmodified, under the GNU Lesser General Public License v3.0 (https://www.gnu.org/licenses/lgpl-3.0.txt).
+Baritone in turn bundles nether-pathfinder (https://github.com/babbaj/nether-pathfinder).

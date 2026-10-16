@@ -15,6 +15,7 @@ import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.settings.StringSetting;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import com.example.addon.sky.AnimatedSky;
+import com.example.addon.sky.VideoSky;
 import net.minecraft.util.Identifier;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,11 +31,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 
-/**
- * Shows your own image as the sky, rendered by the Skyboxify mod (required, not bundled).
- * The image (a 360° panorama works best) is converted into an OptiFine-format sky inside a small generated
- * resource pack, "LarperClientSky", which this module turns on and off. Only you see it.
- */
 public class CustomSky extends Module {
     private static final String[] EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif"};
     private static final String PACK_NAME = "LarperClientSky";
@@ -98,11 +94,58 @@ public class CustomSky extends Module {
         .name("hide-sun-moon").description("Hides the sun, moon and stars.").defaultValue(true)
         .build());
 
+    public enum Quality { Low, Medium, High }
+
+    private final SettingGroup sgVideo = settings.createGroup("Video");
+
+    private final Setting<String> video = sgVideo.add(new StringSetting.Builder()
+        .name("video").description("Paste a YouTube link (or type the name of a video file in the skies folder) to play it as the sky. Overrides the image and GIF. Leave empty for no video.")
+        .defaultValue("")
+        .onChanged(s -> rebuildSoon())
+        .build());
+
+    private final Setting<Integer> videoFps = sgVideo.add(new IntSetting.Builder()
+        .name("fps").description("Frames per second of the sky video, up to 120 (never more than the video itself has).")
+        .defaultValue(60).range(10, 120).sliderRange(10, 120)
+        .onChanged(v -> rebuildSoon())
+        .build());
+
+    private final Setting<Quality> quality = sgVideo.add(new EnumSetting.Builder<Quality>()
+        .name("quality").description("Low: 360p, lightest. Medium: 540p. High: 720p, sharpest but uses more CPU. Medium and High get YouTube's 60 fps stream when there is one.")
+        .defaultValue(Quality.Medium)
+        .onChanged(v -> rebuildSoon())
+        .build());
+
+    private final Setting<Boolean> videoSound = sgVideo.add(new BoolSetting.Builder()
+        .name("sound").description("Play the video's sound.").defaultValue(true)
+        .onChanged(v -> rebuildSoon())
+        .build());
+
+    private final Setting<Integer> volume = sgVideo.add(new IntSetting.Builder()
+        .name("volume").description("Video volume (also follows your Master volume).")
+        .defaultValue(60).range(0, 100).sliderRange(0, 100)
+        .visible(videoSound::get)
+        .onChanged(v -> { if (this.player != null) this.player.volume(v / 100f); })
+        .build());
+
+    private final Setting<Boolean> loop = sgVideo.add(new BoolSetting.Builder()
+        .name("loop").description("Start the video again when it ends.").defaultValue(true)
+        .onChanged(v -> rebuildSoon())
+        .build());
+
+    private final Setting<meteordevelopment.meteorclient.utils.misc.Keybind> playKey = sgVideo.add(new meteordevelopment.meteorclient.settings.KeybindSetting.Builder()
+        .name("play-pause-key").description("Key that pauses and plays the sky video.")
+        .defaultValue(meteordevelopment.meteorclient.utils.misc.Keybind.none())
+        .action(this::playPause)
+        .build());
+
     private int rebuildIn = -1;
     private boolean packEnabled;
+    private VideoSky player;
+    private String playerLink;
 
     public CustomSky() {
-        super(AddonTemplate.CATEGORY, "custom-sky", "Your own image as the sky, using the Skyboxify mod. Only you see it.");
+        super(AddonTemplate.VISUAL, "custom-sky", "Your own image as the sky, using the Skyboxify mod. Only you see it.");
     }
 
     public static boolean skyboxifyInstalled() {
@@ -117,29 +160,36 @@ public class CustomSky extends Module {
             return;
         }
         folder();
-        // Rejoining a world: the sky is still loaded from before, no need to rebuild (and reload) it
         if (!packEnabled) rebuildIn = 0;
     }
 
     @Override
     public void onDeactivate() {
         rebuildIn = -1;
-        // Meteor also calls this when you leave a world, while the module is still on. Reloading resources mid-
-        // disconnect hangs the game on the Mojang screen, so only take the sky down when you turn the module off.
         if (isActive()) return;
+        stopVideo();
         AnimatedSky.stop();
         setPackEnabled(false);
     }
 
-    // Animated skies swap frames every rendered frame
     @EventHandler
     private void onRender(Render3DEvent event) {
         AnimatedSky.tick();
+        if (player != null) player.tick();
     }
 
     @Override
     public meteordevelopment.meteorclient.gui.widgets.WWidget getWidget(meteordevelopment.meteorclient.gui.GuiTheme theme) {
-        return com.example.addon.util.FilePicker.buttons(theme, "Choose a sky image", folder(), image, EXTENSIONS);
+        var list = theme.verticalList();
+        list.add(com.example.addon.util.FilePicker.buttons(theme, "Choose a sky image", folder(), image, EXTENSIONS));
+        var row = list.add(theme.horizontalList()).widget();
+        row.add(theme.button("Play / Pause video")).widget().action = this::playPause;
+        row.add(theme.button("Restart video")).widget().action = () -> {
+            if (player != null) player.play(0);
+            else playPause();
+        };
+        row.add(theme.button("Open tools folder")).widget().action = () -> net.minecraft.util.Util.getOperatingSystem().open(tools().toFile());
+        return list;
     }
 
     public boolean hidesSunMoon() {
@@ -147,19 +197,39 @@ public class CustomSky extends Module {
     }
 
     private void rebuildSoon() {
-        // Sliders fire on every step; wait until they settle so we don't reload resources dozens of times
         if (isActive()) rebuildIn = 20;
     }
+
+    private int stallRetries;
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
         GeneratedPacks.tick();
+        if (player != null && (player.stalledFor() > 15 || player.ended() && player.position() < 1)) {
+            String why = player.lastError() != null ? player.lastError() : "the video isn't arriving fast enough";
+            if (stallRetries++ < 1) {
+                ChatUtils.warning("Sky video stalled (%s) - trying again...", why);
+                double at = player.position();
+                stopVideo();
+                startVideoAt(video.get().trim(), at);
+            } else {
+                ChatUtils.warning("Sky video stopped: %s.%s", why, video.get().contains("youtu") && !Files.isRegularFile(tools().resolve("deno.exe"))
+                    ? " YouTube slows downloads unless yt-dlp can use deno: put deno.exe in the tools folder, or try again later." : "");
+                stopVideo();
+            }
+        }
         if (rebuildIn < 0 || rebuildIn-- > 0) return;
         rebuildIn = -1;
         rebuild();
     }
 
     private void rebuild() {
+        String vid = video.get().trim();
+        if (!vid.isEmpty() && (overworld.get() || end.get())) {
+            startVideo(vid);
+            return;
+        }
+        stopVideo();
         String url = link.get().trim();
         if ((url.isEmpty() && !FileChoices.isFile(image.get())) || !(overworld.get() || end.get())) {
             AnimatedSky.stop();
@@ -179,20 +249,18 @@ public class CustomSky extends Module {
         boolean rotate = rotateWithSun.get(), ow = overworld.get(), en = end.get(), rain = inRain.get();
         if (source == null) ChatUtils.info("Downloading sky GIF...");
 
-        // Download/decode + convert off the render thread (big panoramas and long GIFs take a moment), then reload on it
         CompletableFuture.runAsync(() -> {
             try {
                 AnimatedSky.Gif gif = AnimatedSky.decode(source != null ? Files.readAllBytes(source) : AnimatedSky.download(url));
                 int n = gif.frames().size();
                 BufferedImage first = gif.frames().get(0);
-                // At least 512px per cube side so it stays sharp, stills and GIFs alike (GIF frames convert as they play)
                 int face = Math.max(512, Math.min(n == 1 ? 1024 : 512, first.getWidth() / 2));
                 java.util.function.Function<BufferedImage, BufferedImage> toCube = frame -> fitMode == Fit.Cube
                     ? SkyboxifyCube.convertFlat(frame, face, yaw) : SkyboxifyCube.convert(frame, face, yaw, aboveHorizon, times);
                 writePack(toCube.apply(first), rotate, ow, en, rain);
                 mc.execute(() -> {
                     if (!isActive()) return;
-                    if (packEnabled) GeneratedPacks.safeReload(); // already on: just pick up the new image
+                    if (packEnabled) GeneratedPacks.safeReload();
                     else setPackEnabled(true);
                     if (n > 1) {
                         List<Identifier> ids = new ArrayList<>();
@@ -211,9 +279,8 @@ public class CustomSky extends Module {
 
     private void writePack(BufferedImage cube, boolean rotate, boolean ow, boolean en, boolean rain) throws IOException {
         Path sky = GeneratedPacks.create(PACK_NAME, "Larper Client custom sky").resolve("assets/minecraft/optifine/sky");
-        String props = "source=./larper_sky.png\nblend=replace\nrotate=" + rotate + "\n" + (rotate ? "speed=1\naxis=0.0 1.0 0.0\n" : "") // vertical axis: the default (sun's) axis flips the sky upside down at night
-            + (rain ? "weather=clear rain thunder\n" : ""); // Skyboxify only shows a sky in clear weather unless told otherwise
-        // OptiFine dimension folders: world0 = Overworld, world1 = the End
+        String props = "source=./larper_sky.png\nblend=replace\nrotate=" + rotate + "\n" + (rotate ? "speed=1\naxis=0.0 1.0 0.0\n" : "")
+            + (rain ? "weather=clear rain thunder\n" : "");
         for (String dim : new String[]{"world0", "world1"}) {
             Path dir = sky.resolve(dim);
             boolean on = dim.equals("world0") ? ow : en;
@@ -224,6 +291,109 @@ public class CustomSky extends Module {
             ImageIO.write(cube, "png", dir.resolve("larper_sky.png").toFile());
             Files.writeString(dir.resolve("larper_sky.properties"), props);
         }
+    }
+
+    private void playPause() {
+        if (!isActive() || mc.player == null) return;
+        if (player == null) {
+            if (video.get().isBlank()) ChatUtils.warning("Custom Sky: paste a YouTube link in the Video settings first.");
+            else rebuild();
+            return;
+        }
+        if (player.paused() || player.ended()) {
+            player.resume();
+            ChatUtils.info("Sky video playing.");
+        } else {
+            player.pause();
+            int t = (int) player.position();
+            ChatUtils.info("Sky video paused at %d:%02d.", t / 60, t % 60);
+        }
+    }
+
+    private void stopVideo() {
+        if (player != null) player.stop();
+        player = null;
+        playerLink = null;
+    }
+
+    private void startVideo(String vid) {
+        stallRetries = 0;
+        startVideoAt(vid, player != null && vid.equals(playerLink) ? player.position() : 0);
+    }
+
+    private void startVideoAt(String vid, double from) {
+        boolean wasPaused = player != null && vid.equals(playerLink) && player.paused();
+        stopVideo();
+        AnimatedSky.stop();
+        String ffmpeg = tool("ffmpeg"), ytdlp = tool("yt-dlp"), deno = Files.isRegularFile(tools().resolve("deno.exe")) ? tools().resolve("deno.exe").toAbsolutePath().toString() : null;
+        int face = switch (quality.get()) { case Low -> 256; case Medium -> 384; case High -> 512; };
+        int sw = switch (quality.get()) { case Low -> 640; case Medium -> 960; case High -> 1280; };
+        int sh = sw * 9 / 16, maxHeight = switch (quality.get()) { case Low -> 480; case Medium, High -> 720; };
+        Fit fitMode = fit.get();
+        double yaw = rotation.get();
+        int times = repeat.get(), wantFps = videoFps.get();
+        boolean rotate = rotateWithSun.get(), ow = overworld.get(), en = end.get(), rain = inRain.get(), sound = videoSound.get(), again = loop.get();
+        float vol = volume.get() / 100f;
+        boolean web = vid.regionMatches(true, 0, "http", 0, 4);
+        if (web && !vid.regionMatches(true, 0, "https://", 0, 8)) {
+            ChatUtils.warning("Custom Sky: the video link must start with https://");
+            return;
+        }
+        if (web) ChatUtils.info("Getting the video...");
+        CompletableFuture.runAsync(() -> {
+            try {
+                VideoSky.Source src;
+                if (web) src = VideoSky.resolve(ytdlp, deno, vid, maxHeight);
+                else {
+                    Path file = folder().resolve(vid).normalize();
+                    if (!file.startsWith(folder()) || !Files.isRegularFile(file)) throw new IOException("no video file called " + vid + " in the skies folder");
+                    src = new VideoSky.Source(file.toString(), file.toString(), file.getFileName().toString(), 0);
+                }
+                int fps = src.fps() > 0 ? Math.min(wantFps, (int) Math.ceil(src.fps())) : wantFps;
+                int[] table = SkyboxifyCube.lookup(face, sw, sh, fitMode == Fit.Cube, yaw, fitMode == Fit.AboveHorizon, times);
+                writePack(new BufferedImage(face * 3, face * 2, BufferedImage.TYPE_INT_ARGB), rotate, ow, en, rain);
+                VideoSky.Source found = src;
+                mc.execute(() -> {
+                    if (!isActive() || !vid.equals(video.get().trim())) return;
+                    if (packEnabled) GeneratedPacks.safeReload();
+                    else setPackEnabled(true);
+                    List<Identifier> ids = new ArrayList<>();
+                    if (ow) ids.add(Identifier.of("minecraft", "optifine/sky/world0/larper_sky.png"));
+                    if (en) ids.add(Identifier.of("minecraft", "optifine/sky/world1/larper_sky.png"));
+                    stopVideo();
+                    player = new VideoSky(ffmpeg, found, fps, face, sw, sh, table, ids, sound, again, vol);
+                    playerLink = vid;
+                    player.play(from);
+                    if (wasPaused) player.pause();
+                    ChatUtils.info("Sky video: %s (%d fps)%s", found.title(), fps, wasPaused ? " - paused" : "");
+                });
+            } catch (IOException e) {
+                String msg = e.getMessage() != null && e.getMessage().startsWith("Cannot run program")
+                    ? "yt-dlp/ffmpeg not found. Put yt-dlp.exe and ffmpeg.exe (from their official sites) in the tools folder (button in the module), then try again."
+                    : e.getMessage();
+                mc.execute(() -> ChatUtils.warning("Custom Sky video: %s", msg));
+            } catch (Exception e) {
+                AddonTemplate.LOG.warn("Sky video failed", e);
+                mc.execute(() -> ChatUtils.warning("Custom Sky video failed: %s", e.getMessage()));
+            }
+        });
+    }
+
+    private Path tools() {
+        Path dir = mc.runDirectory.toPath().resolve("larper-client").resolve("tools");
+        try {
+            Files.createDirectories(dir);
+        } catch (IOException ignored) {
+        }
+        return dir;
+    }
+
+    private String tool(String name) {
+        for (String file : new String[]{name + ".exe", name}) {
+            Path p = tools().resolve(file);
+            if (Files.isRegularFile(p)) return p.toAbsolutePath().toString();
+        }
+        return name;
     }
 
     private void setPackEnabled(boolean on) {
@@ -242,7 +412,6 @@ public class CustomSky extends Module {
         return dir;
     }
 
-    // The setting field isn't assigned yet while its own builder runs, so read it lazily
     private String currentImage() {
         return image == null ? null : image.get();
     }

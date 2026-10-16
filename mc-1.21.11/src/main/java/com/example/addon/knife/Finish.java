@@ -1,6 +1,5 @@
 package com.example.addon.knife;
 
-/** CS2-style blade finishes. Model ids are "<knife>_<id>"; keep in sync with FINISHES in tools/gen-knife-models.js. */
 public enum Finish {
     Vanilla(null),
     Fade("fade"),

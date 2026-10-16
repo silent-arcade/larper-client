@@ -38,10 +38,6 @@ import java.util.Base64;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 
-/**
- * Your own skin from a PNG file, or anyone's skin by username (looked up from Mojang). Only you see it: it changes how
- * your player looks in third person, your hand, and the inventory, nothing is sent to the server.
- */
 public class SkinChanger extends Module {
     public enum Source { Username, File }
     public enum Arms { Auto, Classic, Slim }
@@ -70,12 +66,12 @@ public class SkinChanger extends Module {
         .name("arms").description("Arm width. Auto uses the account's model, or detects it from the file.")
         .defaultValue(Arms.Auto).onChanged(v -> reloadSoon()).build());
 
-    private volatile AssetInfo.TextureAsset skin; // null until loaded: you keep your normal skin
+    private volatile AssetInfo.TextureAsset skin;
     private volatile PlayerSkinType model = PlayerSkinType.WIDE;
     private int reloadIn = -1, generation;
 
     public SkinChanger() {
-        super(AddonTemplate.CATEGORY, "skin-changer", "Wear any skin: a PNG file or a player's username. Only you see it.");
+        super(AddonTemplate.VISUAL, "skin-changer", "Wear any skin: a PNG file or a player's username. Only you see it.");
     }
 
     @Override
@@ -95,14 +91,13 @@ public class SkinChanger extends Module {
         reloadIn = -1;
     }
 
-    /** Called from the player mixin: your skin with ours swapped in (cape and elytra kept), or null to leave it. */
     public SkinTextures apply(SkinTextures original) {
         AssetInfo.TextureAsset s = skin;
         return s == null ? null : new SkinTextures(s, original.cape(), original.elytra(), model, original.secure());
     }
 
     private void reloadSoon() {
-        if (isActive()) reloadIn = 15; // wait until you stop typing before looking the name up
+        if (isActive()) reloadIn = 15;
     }
 
     @EventHandler
@@ -112,8 +107,8 @@ public class SkinChanger extends Module {
     }
 
     private void load() {
-        int gen = ++generation; // a slow lookup that finishes after a newer one is ignored
-        PlayerSkinTextureDownloader downloader = new PlayerSkinTextureDownloader(mc.getNetworkProxy(), mc.getTextureManager(), mc); // executor = where textures get registered: the render thread
+        int gen = ++generation;
+        PlayerSkinTextureDownloader downloader = new PlayerSkinTextureDownloader(mc.getNetworkProxy(), mc.getTextureManager(), mc);
         if (source.get() == Source.File) {
             if (!FileChoices.isFile(file.get())) return;
             Path path = folder().resolve(file.get()).normalize();
@@ -122,7 +117,6 @@ public class SkinChanger extends Module {
                 return;
             }
             PlayerSkinType m = arms.get() == Arms.Auto ? detect(path) : chosen();
-            // The downloader reads the file when it exists (the URL is only used if it doesn't) and fixes old 64x32 skins
             finish(gen, downloader.downloadAndRegisterTexture(TEXTURE, path, "", true), m, file.get());
             return;
         }
@@ -161,7 +155,6 @@ public class SkinChanger extends Module {
         }));
     }
 
-    /** {skin url, "slim" or null}, or null if there's no such player or skin. Runs off the render thread. */
     private static String[] lookup(String name) {
         try {
             JsonObject profile = get("https://api.mojang.com/users/profiles/minecraft/" + name);
@@ -173,10 +166,9 @@ public class SkinChanger extends Module {
                 if (!"textures".equals(prop.get("name").getAsString())) continue;
                 String json = new String(Base64.getDecoder().decode(prop.get("value").getAsString()), StandardCharsets.UTF_8);
                 JsonObject textures = JsonParser.parseString(json).getAsJsonObject().getAsJsonObject("textures");
-                if (textures == null || !textures.has("SKIN")) return null; // default skin
+                if (textures == null || !textures.has("SKIN")) return null;
                 JsonObject s = textures.getAsJsonObject("SKIN");
                 String url = s.get("url").getAsString();
-                // Only fetch images from Mojang's own skin server
                 if (!URI.create(url).getHost().equals("textures.minecraft.net")) return null;
                 boolean slim = s.has("metadata") && "slim".equals(s.getAsJsonObject("metadata").get("model").getAsString());
                 return new String[]{url.replace("http://", "https://"), slim ? "slim" : null};
@@ -193,7 +185,6 @@ public class SkinChanger extends Module {
         return r.statusCode() == 200 ? JsonParser.parseString(r.body()).getAsJsonObject() : null;
     }
 
-    // Slim skins leave the outer column of each arm empty: pixel (54, 20) is see-through on a slim 64x64 skin
     private static PlayerSkinType detect(Path path) {
         try {
             BufferedImage img = ImageIO.read(path.toFile());
@@ -217,7 +208,6 @@ public class SkinChanger extends Module {
         return dir;
     }
 
-    // The setting field isn't assigned yet while its own builder runs, so read it lazily
     private String currentFile() {
         return file == null ? null : file.get();
     }

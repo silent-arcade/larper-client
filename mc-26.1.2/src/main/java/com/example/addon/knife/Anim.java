@@ -1,12 +1,5 @@
 package com.example.addon.knife;
 
-/**
- * A keyframed animation with smooth (cubic Hermite / Catmull-Rom) interpolation between keys,
- * easing in at the first key and out at the last.
- *
- * Channels: 0-2 hand-space offset (blocks), 3-5 hand-space rotation X/Y/Z (degrees),
- * 6 roll around the blade, 7 spin in the blade's plane, 8-9 butterfly handle A/B angles (degrees).
- */
 public final class Anim {
     public static final int CHANNELS = 10;
 
@@ -22,7 +15,6 @@ public final class Anim {
         return times[times.length - 1];
     }
 
-    /** Samples every channel at time t (seconds) into out. */
     public void sample(float t, float[] out) {
         int n = times.length;
         if (t <= times[0]) { System.arraycopy(values[0], 0, out, 0, CHANNELS); return; }
@@ -41,9 +33,6 @@ public final class Anim {
         }
     }
 
-    // Monotone (Fritsch-Carlson) Catmull-Rom tangent: never overshoots between keys, so holds stay still and
-    // linked parts never swing past their limits; overshoots only happen where a key asks for them.
-    // Zero at the ends and at turning points, so motion eases in and out.
     private float tangent(int k, int c) {
         if (k == 0 || k == times.length - 1) return 0;
         float d0 = (values[k][c] - values[k - 1][c]) / (times[k] - times[k - 1]);
@@ -62,7 +51,6 @@ public final class Anim {
         private final java.util.List<Float> times = new java.util.ArrayList<>();
         private final java.util.List<float[]> values = new java.util.ArrayList<>();
 
-        /** Key at time t; missing trailing channels are 0. */
         public Builder key(float t, float... v) {
             if (!times.isEmpty() && t <= times.get(times.size() - 1)) throw new IllegalArgumentException("keys must be in time order");
             if (v.length > CHANNELS) throw new IllegalArgumentException("too many channels");

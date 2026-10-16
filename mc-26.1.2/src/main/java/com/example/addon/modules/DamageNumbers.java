@@ -1,6 +1,6 @@
 package com.example.addon.modules;
 
-import com.example.addon.AddonTemplate;
+import com.example.addon.visuals.VisualModule;
 import com.example.addon.visuals.Fx;
 import meteordevelopment.meteorclient.events.render.Render2DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -11,7 +11,6 @@ import meteordevelopment.meteorclient.settings.DoubleSetting;
 import meteordevelopment.meteorclient.settings.IntSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
-import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.NametagUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
@@ -27,8 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
-/** Floating numbers pop off mobs and players when they lose health (or heal). Only you see them. */
-public class DamageNumbers extends Module {
+public class DamageNumbers extends VisualModule {
     private final SettingGroup sg = settings.getDefaultGroup();
 
     private final Setting<Integer> range = sg.add(new IntSetting.Builder()
@@ -64,8 +62,10 @@ public class DamageNumbers extends Module {
     private final List<Pop> pops = new ArrayList<>();
     private final Random rng = new Random();
 
+    private final Setting<Boolean> shakeOn = feature("big-hit-shake", "Big hits and kills shake for a moment as they pop.");
+
     public DamageNumbers() {
-        super(AddonTemplate.CATEGORY, "damage-numbers", "Floating damage numbers when mobs and players get hit. Only you see them.");
+        super("damage-numbers", "Floating damage numbers when mobs and players get hit. Only you see them.");
     }
 
     @Override
@@ -92,6 +92,7 @@ public class DamageNumbers extends Module {
             Vec3 at = e.position().add((rng.nextDouble() - 0.5) * e.getBbWidth(), e.getBbHeight() * 0.85, (rng.nextDouble() - 0.5) * e.getBbWidth());
             Vec3 drift = new Vec3((rng.nextDouble() - 0.5) * 0.6, 0.9, (rng.nextDouble() - 0.5) * 0.6);
             pops.add(new Pop(at, drift, text, c, Fx.time(), big || kill));
+            if (low() && pops.size() > 12) pops.remove(0);
         }
         health.clear();
         health.putAll(seen);
@@ -104,7 +105,6 @@ public class DamageNumbers extends Module {
         TextRenderer text = TextRenderer.get();
         for (Pop p : pops) {
             double f = (now - p.start()) / life;
-            // Pops out, floats up and slows, then fades
             double rise = 1 - Math.pow(1 - f, 2);
             Vec3 at = p.pos().add(p.drift().scale(rise));
             Vector3d v = new Vector3d(at.x, at.y, at.z);
@@ -114,7 +114,9 @@ public class DamageNumbers extends Module {
             int alpha = (int) (p.color().a * (f < 0.7 ? 1 : 1 - (f - 0.7) / 0.3));
             NametagUtils.begin(v);
             text.begin(1, false, true);
-            text.render(p.text(), -text.getWidth(p.text(), true) / 2, 0, Fx.alpha(p.color(), alpha), true);
+            double shake = p.big() && on(shakeOn) && f < 0.25 ? (1 - f / 0.25) * 2.5 : 0;
+            double sx = shake * Math.sin(now * 97 + p.start() * 13), sy = shake * Math.cos(now * 83 + p.start() * 7);
+            text.render(p.text(), -text.getWidth(p.text(), true) / 2 + sx, sy, Fx.alpha(p.color(), alpha), true);
             text.end();
             NametagUtils.end();
         }

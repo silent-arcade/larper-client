@@ -29,10 +29,6 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Animated skies: downloads/decodes a GIF, and plays it (converting frames to the sky cube as needed) by swapping the pixels of
- * the texture Skyboxify draws. Skyboxify looks its texture up by id every frame, so it just sees the new pixels.
- */
 public final class AnimatedSky {
     public record Gif(List<BufferedImage> frames, int[] delaysMs) {}
 
@@ -43,7 +39,6 @@ public final class AnimatedSky {
     private static final Pattern CONTENT = Pattern.compile("content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
     private static final Pattern ANY_GIF = Pattern.compile("https?://[^\"'\\s<>]+?\\.gif(?:\\?[^\"'\\s<>]*)?", Pattern.CASE_INSENSITIVE);
 
-    // Playing state (render thread only)
     private static int[] delays;
     private static int width, height, shown = -1;
     private static long startMs;
@@ -53,9 +48,6 @@ public final class AnimatedSky {
     private AnimatedSky() {
     }
 
-    // ---- Loading ----
-
-    /** Downloads a GIF from a direct link, or finds the GIF on a web page (og:image etc). Runs off the render thread. */
     public static byte[] download(String link) throws IOException, InterruptedException {
         URI uri = URI.create(link.trim());
         if (!"https".equalsIgnoreCase(uri.getScheme()) && !"http".equalsIgnoreCase(uri.getScheme())) throw new IOException("the link must start with https://");
@@ -66,7 +58,6 @@ public final class AnimatedSky {
         if (r.statusCode() == 403 || r.headers().firstValue("cf-mitigated").isPresent() || page.contains("Just a moment..."))
             throw new IOException("that site blocks downloads (bot check). Open the GIF in your browser, right-click it, \"Copy image address\", and paste that link");
         if (r.statusCode() != 200) throw new IOException("the site answered " + r.statusCode());
-        // A web page: use the GIF it advertises
         List<String> candidates = new ArrayList<>();
         Matcher m = META.matcher(page);
         while (m.find()) {
@@ -105,7 +96,6 @@ public final class AnimatedSky {
         }
     }
 
-    /** Decodes every frame of a GIF, composited the way browsers show it. A still image gives one frame. */
     public static Gif decode(byte[] bytes) throws IOException {
         try (ImageInputStream in = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
             var readers = ImageIO.getImageReaders(in);
@@ -141,7 +131,7 @@ public final class AnimatedSky {
                 g.dispose();
                 frames.add(copy(canvas));
                 int d = gce == null ? 10 : attr(gce, "delayTime");
-                delays[i] = (d <= 1 ? 10 : d) * 10; // browsers treat 0-1 as 100 ms
+                delays[i] = (d <= 1 ? 10 : d) * 10;
                 if (disposal.equals("restoreToBackgroundColor")) {
                     Graphics2D c = canvas.createGraphics();
                     c.setComposite(java.awt.AlphaComposite.Clear);
@@ -175,9 +165,6 @@ public final class AnimatedSky {
         return v == null ? 0 : Integer.parseInt(v.getNodeValue());
     }
 
-    // ---- Playing (render thread, with conversion on a background thread) ----
-
-    // Converted frames are kept (off-heap) while they fit in this budget; longer GIFs convert the rest on the fly
     private static final long CACHE_BYTES = 192L << 20;
     private static final java.util.concurrent.ExecutorService WORKER = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "Larper sky frames");
@@ -191,10 +178,6 @@ public final class AnimatedSky {
     private static final Map<Integer, java.util.concurrent.CompletableFuture<NativeImage>> pending = new java.util.HashMap<>();
     private static int cacheable, generation;
 
-    /**
-     * Starts playing a GIF on the given sky texture ids. Frames are converted to the sky cube (by convert) at full
-     * quality just before they're shown, so long GIFs stay as sharp as short ones.
-     */
     public static void play(List<BufferedImage> frames, int[] delaysMs, java.util.function.Function<BufferedImage, BufferedImage> toCube,
                             int cubeWidth, int cubeHeight, List<Identifier> textureIds) {
         stop();
@@ -218,14 +201,13 @@ public final class AnimatedSky {
         for (var f : pending.values()) f.thenAccept(img -> { if (img != null) img.close(); });
         pending.clear();
         shown = -1;
-        live.clear(); // the textures belong to the texture manager now; the next reload replaces them
+        live.clear();
     }
 
     public static boolean playing() {
         return sources != null;
     }
 
-    // Converts frame i on the worker thread into a ready-to-copy image
     private static java.util.concurrent.CompletableFuture<NativeImage> request(int i) {
         return pending.computeIfAbsent(i, k -> {
             int gen = generation;
@@ -242,7 +224,6 @@ public final class AnimatedSky {
         });
     }
 
-    // The frame's pixels if they're ready (from the cache or a finished conversion), else null
     private static NativeImage ready(int i) {
         if (cache[i] != null) return cache[i];
         var f = request(i);
@@ -253,7 +234,6 @@ public final class AnimatedSky {
         return img;
     }
 
-    /** Call every frame: shows the right GIF frame, and re-attaches our texture if a resource reload replaced it. */
     public static void tick() {
         if (sources == null) return;
         int total = 0;
@@ -275,10 +255,10 @@ public final class AnimatedSky {
                 shown = -1;
             }
         }
-        request((index + 1) % sources.size()); // get the next frame converting while this one shows
+        request((index + 1) % sources.size());
         if (index == shown && !reattached) return;
         NativeImage frame = ready(index);
-        if (frame == null) return; // still converting: keep the last frame up a moment longer
+        if (frame == null) return;
         for (DynamicTexture tex : live.values()) {
             NativeImage img = tex.getPixels();
             if (img == null) continue;
@@ -286,6 +266,6 @@ public final class AnimatedSky {
             tex.upload();
         }
         shown = index;
-        if (index >= cacheable) frame.close(); // not kept: converted again next loop
+        if (index >= cacheable) frame.close();
     }
 }
