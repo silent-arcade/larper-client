@@ -4,7 +4,7 @@
 
 **Free to use.** Download it, use it, change it and share it. See [License](#license).
 
-![Wings preview](wings-preview.png)
+![Wing styles: Dragon, Mech, Inferno and Shadow](wings-preview.webp)
 
 ## Download
 
