@@ -31,4 +31,11 @@ public abstract class InGameHudMixin {
             context.drawItem(knife.stack(), x, y);
         }
     }
+
+    // Custom Crosshair draws its own, so hide the vanilla one while it's on
+    @Inject(method = "renderCrosshair(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", at = @At("HEAD"), cancellable = true)
+    private void larper$hideCrosshair(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
+        var cc = Modules.get().get(com.example.addon.modules.CustomCrosshair.class);
+        if (cc != null && cc.replacesVanilla()) ci.cancel();
+    }
 }

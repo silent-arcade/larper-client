@@ -65,6 +65,13 @@ public class AddonTemplate extends MeteorAddon {
         Modules.get().add(new RegionRoute());
         Modules.get().add(new com.example.addon.modules.FastPlace());
         Modules.get().add(new com.example.addon.modules.SkinChanger());
+        Modules.get().add(new com.example.addon.modules.DamageNumbers());
+        Modules.get().add(new com.example.addon.modules.TargetCircle());
+        Modules.get().add(new com.example.addon.modules.KillEffects());
+        Modules.get().add(new com.example.addon.modules.Atmosphere());
+        Modules.get().add(new com.example.addon.modules.CustomCrosshair());
+        Modules.get().add(new com.example.addon.modules.Footprints());
+        Modules.get().add(new com.example.addon.modules.MagicCircle());
 
         // Commands
         Commands.add(new CommandExample());

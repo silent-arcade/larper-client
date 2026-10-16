@@ -30,6 +30,13 @@ Custom Sky also needs the [Skyboxify](https://modrinth.com/mod/skyboxify) mod.
 | Orbit Orbs | Glowing orbs circling you |
 | Trail | A glowing ribbon behind you |
 | Jump Rings | Shockwave rings when you jump and land |
+| Magic Circle | A turning circle under your feet: Runes, Sun, Ripples, Gear or Portal design |
+| Footprints | Glowing footprints where you walk, fading behind you |
+| Atmosphere | Fireflies, snow, petals or embers drifting around you |
+| Target Circle | A glowing ring sliding up and down whoever you're fighting |
+| Damage Numbers | Floating damage (and healing) numbers when mobs and players get hit |
+| Kill Effects | Lightning, a shockwave, hearts or rising souls when you kill something |
+| Custom Crosshair | Your own crosshair: cross, dot, circle or chevron, with spread and a cooldown bar |
 | Cinematic Death | A sword to the liver, a last look, then they go limp. Players rise as angels |
 | Custom Sky | Any image or **GIF link** as your sky (animated GIFs play) |
 | Custom Totem | Your own totem image or **animated GIF** (file or link) and pop sound (with speed, start and end controls) |

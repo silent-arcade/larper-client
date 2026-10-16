@@ -31,4 +31,11 @@ public abstract class InGameHudMixin {
             context.item(knife.stack(), x, y);
         }
     }
+
+    // Custom Crosshair draws its own, so hide the vanilla one while it's on
+    @Inject(method = "extractCrosshair(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", at = @At("HEAD"), cancellable = true)
+    private void larper$hideCrosshair(GuiGraphicsExtractor context, DeltaTracker tickCounter, CallbackInfo ci) {
+        var cc = Modules.get().get(com.example.addon.modules.CustomCrosshair.class);
+        if (cc != null && cc.replacesVanilla()) ci.cancel();
+    }
 }
