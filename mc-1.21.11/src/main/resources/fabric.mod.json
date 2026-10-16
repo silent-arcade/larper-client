@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "larper-client",
+  "version": "${version}",
+  "name": "Larper Client",
+  "description": "Larper Client addon for Meteor Client.",
+  "authors": [
+    "Larper Client"
+  ],
+  "contact": {
+    "sources": "https://github.com/MeteorDevelopment/meteor-addon-template"
+  },
+  "icon": "assets/template/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "meteor": [
+      "com.example.addon.AddonTemplate"
+    ]
+  },
+  "mixins": [
+    "addon-template.mixins.json"
+  ],
+  "custom": {
+    "meteor-client:color": "225,25,25",
+    "modmenu": {
+      "parent": {
+        "id": "meteor-client"
+      }
+    }
+  },
+  "depends": {
+    "java": ">=21",
+    "minecraft": [
+      "${mc_version}"
+    ],
+    "meteor-client": "*"
+  },
+  "suggests": {
+    "skyboxify": "*"
+  }
+}

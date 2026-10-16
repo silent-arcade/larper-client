@@ -1,0 +1,31 @@
+{
+  "required": true,
+  "package": "com.example.addon.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ExampleMixin",
+    "HeldItemRendererMixin",
+    "ItemLayerRenderStateMixin",
+    "InGameHudMixin",
+    "HandledScreenMixin",
+    "CreativeInventoryScreenMixin",
+    "ArmedEntityRenderStateMixin",
+    "SkyRenderingMixin",
+    "PlayerEntityRendererMixin",
+    "GameRendererAccessor",
+    "LivingEntityRenderStateMixin",
+    "LivingEntityRendererMixin",
+    "ModelCommandRendererMixin",
+    "ClientWorldMixin",
+    "LivingEntityMixin",
+    "DrawContextMixin",
+    "CountPlacementModifierAccessor",
+    "HeightRangePlacementModifierAccessor",
+    "RarityFilterPlacementModifierAccessor",
+    "AbstractClientPlayerEntityMixin",
+    "MinecraftClientAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
