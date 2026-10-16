@@ -10,6 +10,8 @@ import meteordevelopment.meteorclient.settings.DoubleSetting;
 import meteordevelopment.meteorclient.settings.ProvidedStringSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
+import meteordevelopment.meteorclient.settings.StringSetting;
+import com.example.addon.sky.AnimatedSky;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.orbit.EventHandler;
@@ -35,6 +37,7 @@ public class CustomTotem extends Module {
     private static final String[] EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif"};
     private static final String PACK_NAME = "LarperClientTotem";
     private static final int SIZE = 64; // item textures are square; 64px keeps detail without a huge 3D model
+    private static final int MAX_FRAMES = 120; // 64 x 7680 px strip: well inside any GPU's texture limit
 
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
 
@@ -43,6 +46,12 @@ public class CustomTotem extends Module {
         .defaultValue(FileChoices.NONE)
         .supplier(() -> FileChoices.list(folder(), currentImage(), EXTENSIONS))
         .onChanged(s -> rebuildIn = isActive() ? 1 : -1)
+        .build());
+
+    private final Setting<String> link = sgGeneral.add(new StringSetting.Builder()
+        .name("gif-link").description("Paste a GIF (or image) link to use as the totem. Overrides the image. Leave empty to use the image.")
+        .defaultValue("")
+        .onChanged(s -> rebuildIn = isActive() ? 20 : -1) // wait until you stop typing
         .build());
 
     private final Setting<String> sound = sgGeneral.add(new ProvidedStringSetting.Builder()
@@ -129,32 +138,53 @@ public class CustomTotem extends Module {
     }
 
     private void rebuild() {
-        if (!FileChoices.isFile(image.get())) {
+        String url = link.get().trim();
+        if (url.isEmpty() && !FileChoices.isFile(image.get())) {
             setPackEnabled(false);
             return;
         }
-        Path source = folder().resolve(image.get());
-        if (!Files.isRegularFile(source)) {
+        Path source = url.isEmpty() ? folder().resolve(image.get()) : null;
+        if (source != null && !Files.isRegularFile(source)) {
             ChatUtils.warning("Totem image not found: %s", image.get());
             return;
         }
+        String name = source != null ? source.getFileName().toString() : url;
+        if (source == null) ChatUtils.info("Downloading totem GIF...");
         CompletableFuture.runAsync(() -> {
             try {
-                BufferedImage img = ImageIO.read(source.toFile());
-                if (img == null) throw new IOException("unsupported image format");
+                // GIFs become an animated item texture: frames stacked top to bottom, timed by a .mcmeta file
+                AnimatedSky.Gif gif = AnimatedSky.decode(source != null ? Files.readAllBytes(source) : AnimatedSky.download(url));
+                int n = Math.min(gif.frames().size(), MAX_FRAMES);
+                BufferedImage strip = new BufferedImage(SIZE, SIZE * n, BufferedImage.TYPE_INT_ARGB);
+                Graphics2D g = strip.createGraphics();
+                for (int i = 0; i < n; i++) g.drawImage(square(gif.frames().get(i)), 0, i * SIZE, null);
+                g.dispose();
                 Path tex = GeneratedPacks.create(PACK_NAME, "Larper Client custom totem").resolve("assets/minecraft/textures/item");
                 Files.createDirectories(tex);
-                ImageIO.write(square(img), "png", tex.resolve("totem_of_undying.png").toFile());
+                ImageIO.write(strip, "png", tex.resolve("totem_of_undying.png").toFile());
+                Path meta = tex.resolve("totem_of_undying.png.mcmeta");
+                if (n > 1) Files.writeString(meta, animation(gif.delaysMs(), n));
+                else Files.deleteIfExists(meta);
                 mc.execute(() -> {
                     if (!isActive()) return;
                     if (packEnabled) GeneratedPacks.safeReload(); // already on: just pick up the new image
                     else setPackEnabled(true);
-                    ChatUtils.info("Custom totem loaded: %s", source.getFileName());
+                    ChatUtils.info("Custom totem loaded: %s%s", name, n > 1 ? " (" + n + " frames)" : "");
                 });
-            } catch (IOException e) {
-                mc.execute(() -> ChatUtils.warning("Couldn't load totem image %s: %s", source.getFileName(), e.getMessage()));
+            } catch (Exception e) {
+                mc.execute(() -> ChatUtils.warning("Couldn't load totem %s: %s", name, e.getMessage()));
             }
         });
+    }
+
+    // Minecraft's texture animation: each frame shows for a whole number of ticks (50 ms)
+    static String animation(int[] delaysMs, int frames) {
+        StringBuilder json = new StringBuilder("{\"animation\":{\"interpolate\":false,\"frames\":[");
+        for (int i = 0; i < frames; i++) {
+            if (i > 0) json.append(',');
+            json.append("{\"index\":").append(i).append(",\"time\":").append(Math.max(1, Math.round(delaysMs[i] / 50f))).append('}');
+        }
+        return json.append("]}}").toString();
     }
 
     // Fits the image into a SIZE x SIZE square, keeping its shape (transparent around it)

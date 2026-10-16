@@ -32,7 +32,7 @@ Custom Sky also needs the [Skyboxify](https://modrinth.com/mod/skyboxify) mod.
 | Jump Rings | Shockwave rings when you jump and land |
 | Cinematic Death | A sword to the liver, a last look, then they go limp. Players rise as angels |
 | Custom Sky | Any image or **GIF link** as your sky (animated GIFs play) |
-| Custom Totem | Your own totem image and pop sound (with speed, start and end controls) |
+| Custom Totem | Your own totem image or **animated GIF** (file or link) and pop sound (with speed, start and end controls) |
 | Skin Changer | Wear any skin: a PNG file or any player's username |
 | Compass | A compass strip with directions and degrees |
 | BPS | Your speed in blocks per second |
