@@ -30,7 +30,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Animated skies: downloads/decodes a GIF, and plays its (already cube-converted) frames by swapping the pixels of
+ * Animated skies: downloads/decodes a GIF, and plays it (converting frames to the sky cube as needed) by swapping the pixels of
  * the texture Skyboxify draws. Skyboxify looks its texture up by id every frame, so it just sees the new pixels.
  */
 public final class AnimatedSky {
@@ -44,7 +44,6 @@ public final class AnimatedSky {
     private static final Pattern ANY_GIF = Pattern.compile("https?://[^\"'\\s<>]+?\\.gif(?:\\?[^\"'\\s<>]*)?", Pattern.CASE_INSENSITIVE);
 
     // Playing state (render thread only)
-    private static int[][] frames;
     private static int[] delays;
     private static int width, height, shown = -1;
     private static long startMs;
@@ -176,40 +175,87 @@ public final class AnimatedSky {
         return v == null ? 0 : Integer.parseInt(v.getNodeValue());
     }
 
-    /** Pixels per cube face for an animation: as sharp as possible while all frames fit in ~160 MB. */
-    public static int faceSize(int frameCount) {
-        double fit = Math.sqrt(160e6 / (frameCount * 6.0 * 4));
-        return (int) Math.max(128, Math.min(512, fit));
-    }
+    // ---- Playing (render thread, with conversion on a background thread) ----
 
-    // ---- Playing (render thread) ----
+    // Converted frames are kept (off-heap) while they fit in this budget; longer GIFs convert the rest on the fly
+    private static final long CACHE_BYTES = 192L << 20;
+    private static final java.util.concurrent.ExecutorService WORKER = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "Larper sky frames");
+        t.setDaemon(true);
+        return t;
+    });
 
-    /** Starts playing converted cube frames on the given sky texture ids. */
-    public static void play(List<BufferedImage> cubes, int[] delaysMs, List<Identifier> textureIds) {
+    private static List<BufferedImage> sources;
+    private static java.util.function.Function<BufferedImage, BufferedImage> convert;
+    private static NativeImage[] cache;
+    private static final Map<Integer, java.util.concurrent.CompletableFuture<NativeImage>> pending = new java.util.HashMap<>();
+    private static int cacheable, generation;
+
+    /**
+     * Starts playing a GIF on the given sky texture ids. Frames are converted to the sky cube (by convert) at full
+     * quality just before they're shown, so long GIFs stay as sharp as short ones.
+     */
+    public static void play(List<BufferedImage> frames, int[] delaysMs, java.util.function.Function<BufferedImage, BufferedImage> toCube,
+                            int cubeWidth, int cubeHeight, List<Identifier> textureIds) {
         stop();
-        width = cubes.get(0).getWidth();
-        height = cubes.get(0).getHeight();
-        frames = new int[cubes.size()][];
-        for (int i = 0; i < cubes.size(); i++) frames[i] = cubes.get(i).getRGB(0, 0, width, height, null, 0, width);
+        sources = frames;
+        convert = toCube;
         delays = delaysMs;
         ids = textureIds;
+        width = cubeWidth;
+        height = cubeHeight;
+        cache = new NativeImage[frames.size()];
+        cacheable = (int) Math.min(frames.size(), CACHE_BYTES / ((long) width * height * 4));
         startMs = System.currentTimeMillis();
         shown = -1;
     }
 
     public static void stop() {
-        frames = null;
+        generation++;
+        sources = null;
+        if (cache != null) for (NativeImage img : cache) if (img != null) img.close();
+        cache = null;
+        for (var f : pending.values()) f.thenAccept(img -> { if (img != null) img.close(); });
+        pending.clear();
         shown = -1;
         live.clear(); // the textures belong to the texture manager now; the next reload replaces them
     }
 
     public static boolean playing() {
-        return frames != null;
+        return sources != null;
+    }
+
+    // Converts frame i on the worker thread into a ready-to-copy image
+    private static java.util.concurrent.CompletableFuture<NativeImage> request(int i) {
+        return pending.computeIfAbsent(i, k -> {
+            int gen = generation;
+            BufferedImage src = sources.get(k);
+            var toCube = convert;
+            int w = width, h = height;
+            return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                if (gen != generation) return null;
+                int[] px = toCube.apply(src).getRGB(0, 0, w, h, null, 0, w);
+                NativeImage img = new NativeImage(w, h, false);
+                for (int y = 0, j = 0; y < h; y++) for (int x = 0; x < w; x++, j++) img.setColorArgb(x, y, px[j]);
+                return img;
+            }, WORKER);
+        });
+    }
+
+    // The frame's pixels if they're ready (from the cache or a finished conversion), else null
+    private static NativeImage ready(int i) {
+        if (cache[i] != null) return cache[i];
+        var f = request(i);
+        if (!f.isDone()) return null;
+        pending.remove(i);
+        NativeImage img = f.join();
+        if (img != null && i < cacheable) cache[i] = img;
+        return img;
     }
 
     /** Call every frame: shows the right GIF frame, and re-attaches our texture if a resource reload replaced it. */
     public static void tick() {
-        if (frames == null) return;
+        if (sources == null) return;
         int total = 0;
         for (int d : delays) total += d;
         long t = (System.currentTimeMillis() - startMs) % Math.max(1, total);
@@ -226,16 +272,20 @@ public final class AnimatedSky {
                 tm.registerTexture(id, tex);
                 live.put(id, tex);
                 reattached = true;
+                shown = -1;
             }
         }
+        request((index + 1) % sources.size()); // get the next frame converting while this one shows
         if (index == shown && !reattached) return;
-        shown = index;
-        int[] px = frames[index];
+        NativeImage frame = ready(index);
+        if (frame == null) return; // still converting: keep the last frame up a moment longer
         for (NativeImageBackedTexture tex : live.values()) {
             NativeImage img = tex.getImage();
             if (img == null) continue;
-            for (int y = 0, i = 0; y < height; y++) for (int x = 0; x < width; x++, i++) img.setColorArgb(x, y, px[i]);
+            img.copyFrom(frame);
             tex.upload();
         }
+        shown = index;
+        if (index >= cacheable) frame.close(); // not kept: converted again next loop
     }
 }

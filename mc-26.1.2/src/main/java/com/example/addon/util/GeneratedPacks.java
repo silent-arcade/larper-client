@@ -52,6 +52,18 @@ public final class GeneratedPacks {
     // loading screen. Outside a world the pack change is saved and simply applies on the next resource load.
     public static void safeReload() {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.level != null && mc.isRunning() && mc.getOverlay() == null) mc.reloadResourcePacks();
+        if (mc.level == null || !mc.isRunning()) return;
+        if (mc.getOverlay() == null) mc.reloadResourcePacks();
+        else reloadQueued = true; // another reload is running (e.g. sky and totem loading together): run ours after it
+    }
+
+    private static boolean reloadQueued;
+
+    /** Call every tick: runs a reload that had to wait for another one to finish. */
+    public static void tick() {
+        if (reloadQueued && Minecraft.getInstance().getOverlay() == null) {
+            reloadQueued = false;
+            safeReload();
+        }
     }
 }

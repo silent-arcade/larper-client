@@ -152,6 +152,7 @@ public class CustomSky extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
+        GeneratedPacks.tick();
         if (rebuildIn < 0 || rebuildIn-- > 0) return;
         rebuildIn = -1;
         rebuild();
@@ -183,13 +184,11 @@ public class CustomSky extends Module {
                 AnimatedSky.Gif gif = AnimatedSky.decode(source != null ? Files.readAllBytes(source) : AnimatedSky.download(url));
                 int n = gif.frames().size();
                 BufferedImage first = gif.frames().get(0);
-                // Stills: at least 512px per side so they stay sharp. Animations: as sharp as memory allows
-                int face = n == 1 ? Math.max(512, Math.min(1024, first.getWidth() / 2)) : AnimatedSky.faceSize(n);
-                List<BufferedImage> cubes = new ArrayList<>(n);
-                for (BufferedImage frame : gif.frames()) {
-                    cubes.add(fitMode == Fit.Cube ? SkyboxifyCube.convertFlat(frame, face, yaw) : SkyboxifyCube.convert(frame, face, yaw, aboveHorizon, times));
-                }
-                writePack(cubes.get(0), rotate, ow, en, rain);
+                // At least 512px per cube side so it stays sharp, stills and GIFs alike (GIF frames convert as they play)
+                int face = Math.max(512, Math.min(n == 1 ? 1024 : 512, first.getWidth() / 2));
+                java.util.function.Function<BufferedImage, BufferedImage> toCube = frame -> fitMode == Fit.Cube
+                    ? SkyboxifyCube.convertFlat(frame, face, yaw) : SkyboxifyCube.convert(frame, face, yaw, aboveHorizon, times);
+                writePack(toCube.apply(first), rotate, ow, en, rain);
                 mc.execute(() -> {
                     if (!isActive()) return;
                     if (packEnabled) GeneratedPacks.safeReload(); // already on: just pick up the new image
@@ -198,7 +197,7 @@ public class CustomSky extends Module {
                         List<Identifier> ids = new ArrayList<>();
                         if (ow) ids.add(Identifier.fromNamespaceAndPath("minecraft", "optifine/sky/world0/larper_sky.png"));
                         if (en) ids.add(Identifier.fromNamespaceAndPath("minecraft", "optifine/sky/world1/larper_sky.png"));
-                        AnimatedSky.play(cubes, gif.delaysMs(), ids);
+                        AnimatedSky.play(gif.frames(), gif.delaysMs(), toCube, face * 3, face * 2, ids);
                     } else AnimatedSky.stop();
                     ChatUtils.info("Custom sky loaded: %s%s", name, n > 1 ? " (" + n + " frames)" : "");
                 });

@@ -36,8 +36,8 @@ import java.util.concurrent.CompletableFuture;
 public class CustomTotem extends Module {
     private static final String[] EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif"};
     private static final String PACK_NAME = "LarperClientTotem";
-    private static final int SIZE = 64; // item textures are square; 64px keeps detail without a huge 3D model
-    private static final int MAX_FRAMES = 120; // 64 x 7680 px strip: well inside any GPU's texture limit
+    private static final int SIZE = 128; // item textures are square; 128px keeps GIFs sharp (HD packs use the same)
+    private static final int MAX_FRAMES = 120; // the game keeps only one frame on the GPU; the strip just sits in memory
 
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
 
@@ -132,6 +132,7 @@ public class CustomTotem extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
+        GeneratedPacks.tick();
         if (rebuildIn < 0 || rebuildIn-- > 0) return;
         rebuildIn = -1;
         rebuild();
@@ -187,14 +188,27 @@ public class CustomTotem extends Module {
         return json.append("]}}").toString();
     }
 
-    // Fits the image into a SIZE x SIZE square, keeping its shape (transparent around it)
+    // Fits the image into a SIZE x SIZE square, keeping its shape (transparent around it). Big images shrink in
+    // halving steps: one big bicubic jump skips most pixels and leaves jagged, noisy edges.
     static BufferedImage square(BufferedImage img) {
-        BufferedImage out = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB);
         double k = (double) SIZE / Math.max(img.getWidth(), img.getHeight());
         int w = Math.max(1, (int) Math.round(img.getWidth() * k)), h = Math.max(1, (int) Math.round(img.getHeight() * k));
+        BufferedImage cur = img;
+        while (cur.getWidth() / 2 >= w && cur.getHeight() / 2 >= h) cur = scale(cur, cur.getWidth() / 2, cur.getHeight() / 2);
+        cur = scale(cur, w, h);
+        BufferedImage out = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = out.createGraphics();
+        g.drawImage(cur, (SIZE - w) / 2, (SIZE - h) / 2, null);
+        g.dispose();
+        return out;
+    }
+
+    private static BufferedImage scale(BufferedImage src, int w, int h) {
+        BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = out.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-        g.drawImage(img, (SIZE - w) / 2, (SIZE - h) / 2, w, h, null);
+        g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        g.drawImage(src, 0, 0, w, h, null);
         g.dispose();
         return out;
     }
