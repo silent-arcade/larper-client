@@ -1,11 +1,13 @@
 package com.example.addon.modules;
 
 import com.example.addon.visuals.Fx;
+import com.example.addon.visuals.FxTheme;
 import com.example.addon.visuals.VisualModule;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.BoolSetting;
 import meteordevelopment.meteorclient.settings.ColorSetting;
+import meteordevelopment.meteorclient.settings.EnumSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.utils.render.color.Color;
@@ -29,15 +31,15 @@ public class SpearFX extends VisualModule {
     private final Setting<Boolean> others = sg.add(new BoolSetting.Builder()
         .name("other-players").description("Show the effects for other players' spears too, not just yours.").defaultValue(true).build());
 
-    private final Setting<Boolean> rainbow = sg.add(new BoolSetting.Builder()
-        .name("rainbow").description("Rainbow colours instead of the colour below.").defaultValue(false).build());
+    private final Setting<FxTheme> theme = sg.add(new EnumSetting.Builder<FxTheme>()
+        .name("theme").description("Colour theme: each one flows between its own colours. Custom uses the colour below.").defaultValue(FxTheme.Frost).build());
 
     private final Setting<SettingColor> color = sg.add(new ColorSetting.Builder()
         .name("color").description("Colour of the spear effects.").defaultValue(new SettingColor(90, 200, 255, 220))
-        .visible(() -> !rainbow.get()).build());
+        .visible(() -> theme.get() == FxTheme.Custom).build());
 
     private final Setting<Boolean> bloomOn = addBloom();
-    private final Setting<Boolean> tipGlow = feature("tip-glow", "The spear tip glows, brighter and bigger while charging.");
+    private final Setting<Boolean> tipGlow = feature("tip-outline", "An outlined cube spins on the spear tip, bigger while charging.");
     private final Setting<Boolean> chargeStreaks = feature("charge-streaks", "Speed streaks trail behind you while charging, more the faster you go.");
     private final Setting<Boolean> jabTrail = feature("jab-trail", "A thrust line shoots out along every jab.");
     private final Setting<Boolean> lungeLines = feature("lunge-lines", "Speed lines and a ground ring when you lunge forward.");
@@ -67,7 +69,7 @@ public class SpearFX extends VisualModule {
     }
 
     private Color tint(double h) {
-        return rainbow.get() ? Fx.hue(h, 220) : color.get();
+        return theme.get().color(h, 220, color.get());
     }
 
     private static boolean spear(ItemStack s) {
@@ -134,7 +136,7 @@ public class SpearFX extends VisualModule {
             double speed = p.getVelocity().horizontalLength();
             if (on(tipGlow) && (p != mc.player || !mc.options.getPerspective().isFirstPerson() || charging)) {
                 double pulse = 0.5 + 0.5 * Math.sin(now * (charging ? 12 : 4));
-                glow(event.renderer, tip, (charging ? 0.32 + 0.4 * Math.min(1, speed * 3) : 0.18) * (0.85 + 0.3 * pulse), Fx.alpha(c, (int) (c.a * (charging ? 0.9 : 0.55))));
+                outline(event.renderer, tip, (charging ? 0.14 + 0.16 * Math.min(1, speed * 3) : 0.08) * (0.85 + 0.3 * pulse), Fx.alpha(c, charging ? 255 : 180));
             }
             if (on(chargeStreaks) && charging && speed > 0.08) {
                 Vec3d back = p.getVelocity().multiply(1, 0, 1).normalize().multiply(-1);
@@ -151,11 +153,9 @@ public class SpearFX extends VisualModule {
         jabs.removeIf(b -> now - b.start() > 0.25);
         if (on(jabTrail)) for (Burst b : jabs) {
             double f = (now - b.start()) / 0.25, reach = 0.8 + 3.2 * (1 - Math.pow(1 - f, 3));
-            for (int k = 0; k < 14; k++) {
-                double t = 0.6 + reach * k / 13.0;
-                glow(event.renderer, b.pos().add(b.dir().multiply(t)), 0.06 + 0.07 * (k / 13.0), Fx.alpha(b.color(), (int) (220 * (1 - f) * (0.25 + 0.75 * k / 13.0))));
-            }
-            glow(event.renderer, b.pos().add(b.dir().multiply(0.6 + reach)), 0.32 * (1 - f * 0.5), Fx.alpha(b.color(), (int) (240 * (1 - f))));
+            Vec3d from = b.pos().add(b.dir().multiply(0.6)), to = b.pos().add(b.dir().multiply(0.6 + reach));
+            event.renderer.line(from.x, from.y, from.z, to.x, to.y, to.z, Fx.alpha(b.color(), 40), Fx.alpha(b.color(), (int) (255 * (1 - f))));
+            outline(event.renderer, to, 0.12 * (1 - f * 0.5), Fx.alpha(b.color(), (int) (240 * (1 - f))));
         }
         lunges.removeIf(b -> now - b.start() > 0.5);
         if (on(lungeLines)) for (Burst b : lunges) {
@@ -171,11 +171,12 @@ public class SpearFX extends VisualModule {
         hits.removeIf(b -> now - b.start() > 0.4);
         if (on(hitBurst)) for (Burst b : hits) {
             double f = (now - b.start()) / 0.4;
-            glow(event.renderer, b.pos(), 0.5 + 0.6 * f, Fx.alpha(b.color(), (int) (240 * (1 - f))));
+            outline(event.renderer, b.pos(), 0.25 + 0.35 * f, Fx.alpha(b.color(), (int) (240 * (1 - f))));
             for (int k = 0; k < 10; k++) {
                 double yaw = k * 2.39996, up = Math.sin(k * 1.3) * 0.6;
                 Vec3d dir = new Vec3d(Math.cos(yaw), up, Math.sin(yaw)).add(b.dir().multiply(0.8)).normalize();
-                spark(event.renderer, b.pos().add(dir.multiply(0.2 + f * 1.6)), 0.18 * (1 - f), Fx.alpha(b.color(), (int) (255 * (1 - f))), true);
+                Color sc = k % 2 == 0 ? b.color() : theme.get().secondary(b.start() * 0.2, 255, color.get());
+                spark(event.renderer, b.pos().add(dir.multiply(0.2 + f * 1.6)), 0.18 * (1 - f), Fx.alpha(sc, (int) (255 * (1 - f))), true);
             }
         }
     }

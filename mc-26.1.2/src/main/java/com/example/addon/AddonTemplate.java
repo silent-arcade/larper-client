@@ -35,9 +35,9 @@ import org.slf4j.Logger;
 
 public class AddonTemplate extends MeteorAddon {
     public static final Logger LOG = LogUtils.getLogger();
-    public static final Category CATEGORY = new Category("Larper Client");
-    public static final Category AUTOMATION = new Category("Larper Automation");
-    public static final Category VISUAL = new Category("Larper Visual");
+    public static final Category CATEGORY = new Category("Larper Client", () -> net.minecraft.world.item.Items.END_CRYSTAL.getDefaultInstance());
+    public static final Category AUTOMATION = new Category("Larper Automation", () -> net.minecraft.world.item.Items.DIAMOND_PICKAXE.getDefaultInstance());
+    public static final Category VISUAL = new Category("Larper Visual", () -> net.minecraft.world.item.Items.FIREWORK_ROCKET.getDefaultInstance());
     public static final HudGroup HUD_GROUP = new HudGroup("Larper Client");
 
     @Override
@@ -57,6 +57,7 @@ public class AddonTemplate extends MeteorAddon {
         Modules.get().add(new CinematicDeath());
         Modules.get().add(new CustomTotem());
         Modules.get().add(new OreSim());
+        Modules.get().add(new com.example.addon.modules.DebrisFinder());
         Modules.get().add(new TntCartAssist());
         Modules.get().add(new TurnOffAll());
         Modules.get().add(new com.example.addon.modules.SilentCrystal());

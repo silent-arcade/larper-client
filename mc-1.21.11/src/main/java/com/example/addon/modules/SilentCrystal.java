@@ -56,11 +56,14 @@ public class SilentCrystal extends SilentBase {
     private void onTick(TickEvent.Pre event) {
         if (placeTimer > 0) placeTimer--;
         if (breakTimer > 0) breakTimer--;
-        if (!held()) return;
+        if (!held()) {
+            releaseSlot();
+            return;
+        }
 
         if (safe() && humanAim.get() && !(mc.crosshairTarget instanceof EntityHitResult)) {
             EndCrystalEntity near = nearestCrystal(aimRadius.get());
-            if (near != null) turnTowards(near.getBoundingBox().getCenter().add(0, (aimJitter - 0.5) * 0.6, 0));
+            if (near != null && turnTowards(near.getBoundingBox().getCenter().add(0, (aimJitter - 0.5) * 0.6, 0))) return;
         }
 
         if (breakTimer <= 0) {
@@ -85,7 +88,7 @@ public class SilentCrystal extends SilentBase {
         else {
             FindItemResult item = InvUtils.findInHotbar(Items.END_CRYSTAL);
             if (!item.found()) return false;
-            use(item.slot(), hit);
+            return use(item.slot(), hit);
         }
         return true;
     }

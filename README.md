@@ -38,7 +38,7 @@ Custom Sky also needs the [Skyboxify](https://modrinth.com/mod/skyboxify) mod.
 | Kill Effects | Lightning, a shockwave, hearts or rising souls when you kill something |
 | Custom Crosshair | Your own crosshair: cross, dot, circle or chevron, with spread and a cooldown bar |
 | Cinematic Death | A sword to the liver, a last look, then they go limp. Players rise as angels |
-| Custom Sky | Any image, **GIF link** or **YouTube video** as your sky, up to 120 fps, with play/pause (videos need `yt-dlp.exe` and `ffmpeg.exe` in `.minecraft/larper-client/tools`) |
+| Custom Sky | Any image, **GIF link** or **YouTube video** as your sky, up to 120 fps, with play/pause (yt-dlp and ffmpeg download automatically the first time on Windows) |
 | Custom Totem | Your own totem image or **animated GIF** (file or link) and pop sound (with speed, start and end controls) |
 | Skin Changer | Wear any skin: a PNG file or any player's username |
 | Compass | A compass strip with directions and degrees |
@@ -72,7 +72,8 @@ Custom Sky also needs the [Skyboxify](https://modrinth.com/mod/skyboxify) mod.
 | Key Wind Charge | Throws a wind charge with one key |
 | Twerk | Crouches and uncrouches fast |
 | Schematic Builder | Builds a .litematic/.schem/.nbt like a player: takes materials from your chest, places every block facing the right way (uses temporary supports, crouching or pillaring when needed) and walks with Baritone |
-| Area Miner | Clears an area between two corners in 3x3 tunnels (made for 3x3 pickaxes) |
+| Area Miner | Left-click two corners and it clears the box out with a real held left click; made for 3x3 pickaxes like the Shard Pickaxe, no Baritone needed |
+| Debris Finder | Finds ancient debris from the world seed and checks each spot against what the server shows you |
 | Auto Miner | Mines your chosen ores with Baritone, pausing near players, at low health or when you move |
 | Pearl Catch | Throws a pearl and a wind charge in the same tick so the pearl catches it in mid-air |
 | XP Macro | Throws XP bottles from your hotbar at your feet while you hold a key, until your gear is mended |
@@ -106,7 +107,7 @@ cd mc-1.21.11     # or mc-26.1.2 (needs JDK 25)
 ## Credits
 
 - [Meteor Client](https://github.com/MeteorDevelopment/meteor-client) and its addon template.
-- [Baritone](https://github.com/cabaletta/baritone) (Meteor's build, LGPL-3.0) is bundled in the jar for the automation modules.
+- [Baritone](https://github.com/cabaletta/baritone) is not bundled: install it yourself (Meteor's build) for the modules that walk with it (Schematic Builder, Auto Miner). Area Miner works without it.
 - Ore Sim is ported from [Meteor Rejects](https://github.com/AntiCope/meteor-rejects) (GPL-3.0).
 - The butterfly and karambit viewmodel frames come from the [CS:GO Hands](https://www.curseforge.com/minecraft/mc-mods/cs-go-hands) mod by StsThorn (MIT). The license is in the assets folder.
 - The DonutSMP region layout matches [Glazed](https://github.com/realnnpg/glazed)'s Region Map.

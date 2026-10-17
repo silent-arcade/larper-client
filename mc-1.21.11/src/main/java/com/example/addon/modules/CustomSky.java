@@ -325,7 +325,7 @@ public class CustomSky extends Module {
         boolean wasPaused = player != null && vid.equals(playerLink) && player.paused();
         stopVideo();
         AnimatedSky.stop();
-        String ffmpeg = tool("ffmpeg"), ytdlp = tool("yt-dlp"), deno = Files.isRegularFile(tools().resolve("deno.exe")) ? tools().resolve("deno.exe").toAbsolutePath().toString() : null;
+        String deno = Files.isRegularFile(tools().resolve("deno.exe")) ? tools().resolve("deno.exe").toAbsolutePath().toString() : null;
         int face = switch (quality.get()) { case Low -> 256; case Medium -> 384; case High -> 512; };
         int sw = switch (quality.get()) { case Low -> 640; case Medium -> 960; case High -> 1280; };
         int sh = sw * 9 / 16, maxHeight = switch (quality.get()) { case Low -> 480; case Medium, High -> 720; };
@@ -342,6 +342,7 @@ public class CustomSky extends Module {
         if (web) ChatUtils.info("Getting the video...");
         CompletableFuture.runAsync(() -> {
             try {
+                String ffmpeg = tool("ffmpeg"), ytdlp = web ? tool("yt-dlp") : "yt-dlp";
                 VideoSky.Source src;
                 if (web) src = VideoSky.resolve(ytdlp, deno, vid, maxHeight);
                 else {
@@ -369,7 +370,7 @@ public class CustomSky extends Module {
                 });
             } catch (IOException e) {
                 String msg = e.getMessage() != null && e.getMessage().startsWith("Cannot run program")
-                    ? "yt-dlp/ffmpeg not found. Put yt-dlp.exe and ffmpeg.exe (from their official sites) in the tools folder (button in the module), then try again."
+                    ? "couldn't get yt-dlp/ffmpeg. Check your internet and try again, or put yt-dlp.exe and ffmpeg.exe (from their official sites) in the tools folder (button in the module)."
                     : e.getMessage();
                 mc.execute(() -> ChatUtils.warning("Custom Sky video: %s", msg));
             } catch (Exception e) {
@@ -388,10 +389,37 @@ public class CustomSky extends Module {
         return dir;
     }
 
-    private String tool(String name) {
+    private synchronized String tool(String name) {
         for (String file : new String[]{name + ".exe", name}) {
             Path p = tools().resolve(file);
             if (Files.isRegularFile(p)) return p.toAbsolutePath().toString();
+        }
+        // Missing on Windows: fetch it once from the official download (yt-dlp's GitHub releases, the ffmpeg.org-linked gyan.dev build)
+        if (!System.getProperty("os.name", "").toLowerCase().contains("win")) return name;
+        String url = name.equals("ffmpeg") ? "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" : "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
+        Path exe = tools().resolve(name + ".exe"), tmp = tools().resolve(name + ".download");
+        mc.execute(() -> ChatUtils.info("Downloading %s (one time, %s)...", name, name.equals("ffmpeg") ? "~110 MB" : "~18 MB"));
+        try {
+            var http = java.net.http.HttpClient.newBuilder().followRedirects(java.net.http.HttpClient.Redirect.NORMAL).build();
+            var res = http.send(java.net.http.HttpRequest.newBuilder(java.net.URI.create(url)).build(), java.net.http.HttpResponse.BodyHandlers.ofFile(tmp));
+            if (res.statusCode() != 200) throw new IOException("HTTP " + res.statusCode());
+            if (url.endsWith(".zip")) {
+                try (var zip = new java.util.zip.ZipFile(tmp.toFile())) {
+                    var entry = zip.stream().filter(e -> e.getName().endsWith("/bin/ffmpeg.exe")).findFirst().orElseThrow(() -> new IOException("no ffmpeg.exe in the download"));
+                    try (var in = zip.getInputStream(entry)) {
+                        Files.copy(in, exe, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    }
+                }
+                Files.delete(tmp);
+            } else Files.move(tmp, exe, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            mc.execute(() -> ChatUtils.info("Got %s.", name));
+            return exe.toAbsolutePath().toString();
+        } catch (Exception e) {
+            AddonTemplate.LOG.warn("Couldn't download " + name, e);
+            try {
+                Files.deleteIfExists(tmp);
+            } catch (IOException ignored) {
+            }
         }
         return name;
     }

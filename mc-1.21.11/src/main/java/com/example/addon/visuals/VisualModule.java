@@ -2,11 +2,13 @@ package com.example.addon.visuals;
 
 import com.example.addon.AddonTemplate;
 import meteordevelopment.meteorclient.renderer.Renderer3D;
+import meteordevelopment.meteorclient.renderer.ShapeMode;
 import meteordevelopment.meteorclient.settings.BoolSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.function.DoubleFunction;
@@ -54,6 +56,15 @@ public abstract class VisualModule extends Module {
 
     protected void glow(Renderer3D r, Vec3d c, double radius, Color color) {
         Fx.glow(r, c, radius, color, bloom(), low());
+    }
+
+    protected void outline(Renderer3D r, Box box, Color color) {
+        r.box(box, color, color, ShapeMode.Lines, 0);
+        if (bloom()) r.box(box.expand(0.03), Fx.alpha(color, color.a / 3), Fx.alpha(color, color.a / 3), ShapeMode.Lines, 0);
+    }
+
+    protected void outline(Renderer3D r, Vec3d c, double half, Color color) {
+        outline(r, new Box(c.x - half, c.y - half, c.z - half, c.x + half, c.y + half, c.z + half), color);
     }
 
     protected void ring(Renderer3D r, Vec3d c, double inner, double outer, int segments, DoubleFunction<Color> colorAt) {

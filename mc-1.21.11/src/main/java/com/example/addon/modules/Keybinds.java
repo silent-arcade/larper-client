@@ -49,7 +49,10 @@ public class Keybinds extends Module implements PositionScreen.Placeable {
     private final Setting<Boolean> background = sg.add(new BoolSetting.Builder()
         .name("background").description("Box behind the list, in your click GUI's background colour.").defaultValue(true).build());
 
-    private record Line(String text, boolean on) {}
+    private record Line(String id, String name, String key, boolean on, boolean pressed) {}
+
+    private final java.util.Map<String, Float> glow = new java.util.HashMap<>();
+    private long lastFrame;
 
     public Keybinds() {
         super(AddonTemplate.VISUAL, "keybinds", "Shows your keybinds on screen; green means that module is on. Colours follow your click GUI theme.");
@@ -73,42 +76,108 @@ public class Keybinds extends Module implements PositionScreen.Placeable {
         for (Module m : Modules.get().getAll()) {
             boolean on = m.isActive();
             if (!on && !showOff.get()) continue;
-            if (m.keybind.isSet()) lines.add(new Line(m.title + " [" + m.keybind + "]", on));
+            if (m.keybind.isSet()) lines.add(new Line(m.name, m.title, m.keybind.toString(), on, m.keybind.isPressed()));
             if (!settingKeys.get()) continue;
-            for (var group : m.settings) for (Setting<?> s : group) {
-                if (s instanceof KeybindSetting && s.get() instanceof Keybind k && k.isSet() && !k.equals(s.getDefaultValue())) lines.add(new Line(m.title + ": " + s.title + " [" + k + "]", on));
+            for (var group : m.settings) for (Setting<?> st : group) {
+                if (st instanceof KeybindSetting && st.get() instanceof Keybind k && k.isSet() && !k.equals(st.getDefaultValue()))
+                    lines.add(new Line(m.name + "/" + st.name, m.title + " · " + st.title, k.toString(), on, k.isPressed()));
             }
         }
-        if (lines.isEmpty()) lines.add(new Line("No keybinds set", false));
-        lines.sort(Comparator.comparing((Line l) -> !l.on()).thenComparing(Line::text, String.CASE_INSENSITIVE_ORDER));
+        lines.sort(Comparator.comparing((Line l) -> !l.on()).thenComparing(Line::name, String.CASE_INSENSITIVE_ORDER));
         return lines;
+    }
+
+    private static int lerp(int a, int b, float t) {
+        int r = 0;
+        for (int sh = 0; sh <= 24; sh += 8) r |= Math.round((a >>> sh & 255) * (1 - t) + (b >>> sh & 255) * t) << sh;
+        return r;
+    }
+
+    private static void round(DrawContext ctx, int x1, int y1, int x2, int y2, int color) {
+        ctx.fill(x1 + 1, y1, x2 - 1, y2, color);
+        ctx.fill(x1, y1 + 1, x1 + 1, y2 - 1, color);
+        ctx.fill(x2 - 1, y1 + 1, x2, y2 - 1, color);
     }
 
     @Override
     public int[] drawOverlay(DrawContext ctx) {
         List<Line> lines = lines();
-        float s = scale.get().floatValue();
-        int w = mc.textRenderer.getWidth("Keybinds") + 6;
-        for (Line l : lines) w = Math.max(w, mc.textRenderer.getWidth(l.text()) + 6);
-        int h = (lines.size() + 1) * 10 + 6;
-        int sw = (int) (mc.getWindow().getScaledWidth() / s), sh = (int) (mc.getWindow().getScaledHeight() / s);
-        int ox = (int) (offsetX.get() / s), oy = (int) (offsetY.get() / s);
+        long now = System.nanoTime();
+        float dt = lastFrame == 0 ? 0 : Math.min(0.1f, (now - lastFrame) / 1e9f);
+        lastFrame = now;
+        for (Line l : lines) {
+            float g = glow.getOrDefault(l.id(), l.on() ? 1f : 0f);
+            glow.put(l.id(), l.on() ? Math.min(1, g + dt * 5) : Math.max(0, g - dt * 5));
+        }
+
+        var tr = mc.textRenderer;
+        int on = (int) lines.stream().filter(Line::on).count();
+        String title = "KEYBINDS", count = lines.isEmpty() ? "none set" : on + "/" + lines.size() + " ON";
+        int nameW = tr.getWidth(title) + tr.getWidth(count) + 14, keyW = 0;
+        for (Line l : lines) {
+            nameW = Math.max(nameW, tr.getWidth(l.name()) + 16);
+            keyW = Math.max(keyW, tr.getWidth(l.key()) + 8);
+        }
+        int rowH = 14, head = 16, pad = 4;
+        int w = nameW + keyW + pad * 2 + 4, h = head + Math.max(1, lines.size()) * rowH + pad;
+
+        float sc = scale.get().floatValue();
+        int sw = (int) (mc.getWindow().getScaledWidth() / sc), sh = (int) (mc.getWindow().getScaledHeight() / sc);
+        int ox = (int) (offsetX.get() / sc), oy = (int) (offsetY.get() / sc);
         int x = switch (corner.get()) { case TopLeft, BottomLeft -> ox; default -> sw - ox - w; };
         int y = switch (corner.get()) { case TopLeft, TopRight -> oy; default -> sh - oy - h; };
 
-        int accent = ThemeColors.accent();
+        int accent = ThemeColors.accent() | 0xFF000000, bg = ThemeColors.background(), text = ThemeColors.text() | 0xFF000000;
+        int dim = ThemeColors.mix(text, bg, 0.5), green = 0xFF4CFF7A;
+        double t = System.currentTimeMillis() / 1000.0;
+
         var m = ctx.getMatrices();
         m.pushMatrix();
-        m.scale(s, s);
-        if (background.get()) ctx.fill(x, y, x + w, y + h, ThemeColors.background());
-        ctx.fill(x, y, x + w, y + 12, ThemeColors.withAlpha(accent, 200));
-        ctx.drawTextWithShadow(mc.textRenderer, "Keybinds", x + 3, y + 2, readableOn(accent));
+        m.scale(sc, sc);
+        if (background.get()) {
+            round(ctx, x + 2, y + 2, x + w + 2, y + h + 2, 0x50000000);
+            round(ctx, x, y, x + w, y + h, bg);
+        }
+        int strips = 24;
+        for (int i = 0; i < strips; i++) {
+            int x1 = x + w * i / strips, x2 = x + w * (i + 1) / strips;
+            float f = (float) i / (strips - 1);
+            int c = lerp(accent, ThemeColors.withAlpha(accent, 40), f);
+            ctx.fill(i == 0 ? x1 + 1 : x1, y, i == strips - 1 ? x2 - 1 : x2, y + head, c);
+            if (i == 0) ctx.fill(x1, y + 1, x1 + 1, y + head, c);
+        }
+        int shine = (int) ((t * 40) % (w + 40)) - 20;
+        if (shine > 0 && shine < w - 2) ctx.fill(x + shine, y + 1, x + Math.min(w - 1, shine + 6), y + head - 1, 0x22FFFFFF);
+        ctx.drawTextWithShadow(tr, title, x + pad + 2, y + 4, readableOn(accent));
+        ctx.drawTextWithShadow(tr, count, x + w - pad - 2 - tr.getWidth(count), y + 4, ThemeColors.withAlpha(readableOn(accent), 200));
+
+        if (lines.isEmpty()) ctx.drawTextWithShadow(tr, "Bind a key to a module", x + pad + 2, y + head + 3, dim);
         for (int i = 0; i < lines.size(); i++) {
             Line l = lines.get(i);
-            ctx.drawTextWithShadow(mc.textRenderer, l.text(), x + 3, y + 5 + (i + 1) * 10, l.on() ? 0xFF55FF55 : ThemeColors.mix(ThemeColors.text(), ThemeColors.background(), 0.45));
+            float g = glow.getOrDefault(l.id(), 0f);
+            int ry = y + head + i * rowH + 1;
+            if (g > 0) {
+                ctx.fill(x + 2, ry, x + w - 2, ry + rowH - 1, ThemeColors.withAlpha(green, (int) (34 * g)));
+                ctx.fill(x + 2, ry, x + 4, ry + rowH - 1, ThemeColors.withAlpha(green, (int) (255 * g)));
+            }
+            int dotX = x + pad + 3, dotY = ry + rowH / 2 - 2;
+            if (g > 0) {
+                float pulse = 0.6f + 0.4f * (float) Math.sin(t * 4 + i);
+                ctx.fill(dotX - 2, dotY - 2, dotX + 6, dotY + 6, ThemeColors.withAlpha(green, (int) (45 * g * pulse)));
+                ctx.fill(dotX - 1, dotY - 1, dotX + 5, dotY + 5, ThemeColors.withAlpha(green, (int) (90 * g * pulse)));
+            }
+            ctx.fill(dotX, dotY, dotX + 4, dotY + 4, lerp(ThemeColors.withAlpha(dim, 200), green, g));
+            ctx.drawTextWithShadow(tr, l.name(), x + pad + 12, ry + 3, lerp(dim, 0xFFFFFFFF, g));
+
+            int kw = tr.getWidth(l.key()) + 8, kx = x + w - pad - kw, ky = ry + 1, kh = rowH - 3;
+            int capBg = l.pressed() ? accent : lerp(ThemeColors.mix(bg, 0xFF000000, 0.35), ThemeColors.mix(accent, bg, 0.75), g);
+            round(ctx, kx, ky + 1, kx + kw, ky + kh + 1, ThemeColors.withAlpha(0xFF000000, 120));
+            round(ctx, kx, ky, kx + kw, ky + kh, ThemeColors.withAlpha(l.pressed() ? accent : lerp(dim, accent, g), 255));
+            round(ctx, kx + 1, ky + 1, kx + kw - 1, ky + kh - 1, capBg);
+            ctx.drawText(tr, l.key(), kx + 4, ky + 2, l.pressed() ? readableOn(accent) : lerp(dim, text, Math.max(g, 0.4f)), false);
         }
         m.popMatrix();
-        return new int[]{(int) (x * s), (int) (y * s), (int) (w * s), (int) (h * s)};
+        return new int[]{(int) (x * sc), (int) (y * sc), (int) ((w + 2) * sc), (int) ((h + 2) * sc)};
     }
 
     static int readableOn(int bg) {

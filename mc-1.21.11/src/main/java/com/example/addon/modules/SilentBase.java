@@ -29,7 +29,7 @@ public abstract class SilentBase extends Module {
         .name("macro-key").description("Hold this to run the macro on what you're looking at.").defaultValue(Keybind.fromButton(GLFW.GLFW_MOUSE_BUTTON_RIGHT)).build());
 
     protected final Setting<Mode> mode = sg.add(new EnumSetting.Builder<Mode>()
-        .name("mode").description("Safe: never faster than 2 ticks, randomised timing, only exactly what you look at. Blatant: your delays as set, plus silent aim at things near your crosshair. Fast: no delays at all, everything as soon as possible.")
+        .name("mode").description("Safe: plays like a real player: only what your crosshair is on, switches item and clicks on separate ticks, waits for your aim to settle, never faster than 2 ticks, randomised timing. Blatant: your delays as set, plus silent aim at things near your crosshair. Fast: no delays at all, everything as soon as possible.")
         .defaultValue(Mode.Safe).build());
 
     protected final Setting<Integer> jitter = sg.add(new IntSetting.Builder()
@@ -77,16 +77,18 @@ public abstract class SilentBase extends Module {
         return safe() ? Math.max(2, base) + rng.nextInt(jitter.get() + 1) : base;
     }
 
-    protected void turnTowards(Vec3d target) {
+    protected boolean turnTowards(Vec3d target) {
         Vec3d d = target.subtract(mc.player.getEyePos());
         float yaw = (float) Math.toDegrees(Math.atan2(-d.x, d.z));
         float pitch = (float) MathHelper.clamp(-Math.toDegrees(Math.atan2(d.y, Math.hypot(d.x, d.z))), -90, 90);
         float dy = MathHelper.wrapDegrees(yaw - mc.player.getYaw()), dp = pitch - mc.player.getPitch();
+        if (Math.abs(dy) < 1.5f && Math.abs(dp) < 1.5f) return false;
         float max = turnSpeed.get().floatValue();
         float stepY = MathHelper.clamp(dy * (0.3f + rng.nextFloat() * 0.25f), -max, max) + (float) rng.nextGaussian() * 0.3f;
         float stepP = MathHelper.clamp(dp * (0.3f + rng.nextFloat() * 0.25f), -max, max) + (float) rng.nextGaussian() * 0.2f;
         mc.player.setYaw(mc.player.getYaw() + stepY);
         mc.player.setPitch(MathHelper.clamp(mc.player.getPitch() + stepP, -90, 90));
+        return true;
     }
 
     protected boolean selfOk(double self) {
@@ -94,9 +96,34 @@ public abstract class SilentBase extends Module {
         return !antiSuicide.get() || self < mc.player.getHealth() + mc.player.getAbsorptionAmount() - 1;
     }
 
-    protected void use(int slot, BlockHitResult hit) {
-        InvUtils.swap(slot, true);
+    private int homeSlot = -1;
+
+    // Safe: picks the slot on one tick and clicks on a later one, like scrolling then clicking. True once it clicked.
+    protected boolean use(int slot, BlockHitResult hit) {
+        if (!safe()) {
+            InvUtils.swap(slot, true);
+            BlockUtils.interact(hit, Hand.MAIN_HAND, true);
+            InvUtils.swapBack();
+            return true;
+        }
+        int selected = mc.player.getInventory().getSelectedSlot();
+        if (selected != slot) {
+            if (homeSlot < 0) homeSlot = selected;
+            InvUtils.swap(slot, false);
+            return false;
+        }
         BlockUtils.interact(hit, Hand.MAIN_HAND, true);
-        InvUtils.swapBack();
+        return true;
+    }
+
+    // Safe: back to the slot you had, on a tick after the last click
+    protected void releaseSlot() {
+        if (homeSlot >= 0 && mc.player != null) InvUtils.swap(homeSlot, false);
+        homeSlot = -1;
+    }
+
+    @Override
+    public void onDeactivate() {
+        releaseSlot();
     }
 }

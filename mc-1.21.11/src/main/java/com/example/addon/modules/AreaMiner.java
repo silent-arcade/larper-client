@@ -17,7 +17,6 @@ import meteordevelopment.meteorclient.settings.BoolSetting;
 import meteordevelopment.meteorclient.settings.ColorSetting;
 import meteordevelopment.meteorclient.settings.DoubleSetting;
 import meteordevelopment.meteorclient.settings.EnumSetting;
-import meteordevelopment.meteorclient.events.entity.player.InteractBlockEvent;
 import meteordevelopment.meteorclient.events.entity.player.StartBreakingBlockEvent;
 import meteordevelopment.meteorclient.settings.IntSetting;
 import meteordevelopment.meteorclient.settings.Setting;
@@ -55,11 +54,11 @@ public class AreaMiner extends Module {
     private final SettingGroup sgPreview = settings.createGroup("Preview");
 
     private final Setting<BlockPos> corner1 = sgArea.add(new BlockPosSetting.Builder()
-        .name("start-pos").description("Start corner of the area. Left-click a block, or use the buttons above.")
+        .name("start-pos").description("First corner of the area. Left-click a block while the module is on, or use the buttons above.")
         .defaultValue(BlockPos.ORIGIN).build());
 
     private final Setting<BlockPos> corner2 = sgArea.add(new BlockPosSetting.Builder()
-        .name("end-pos").description("End corner (the opposite corner). Right-click a block, or use the buttons above.").defaultValue(BlockPos.ORIGIN).build());
+        .name("end-pos").description("Opposite corner of the area. The second left-click, or use the buttons above.").defaultValue(BlockPos.ORIGIN).build());
 
     private final Setting<Boolean> showArea = sgArea.add(new BoolSetting.Builder()
         .name("show-area").description("Outline the area.").defaultValue(true).build());
@@ -77,7 +76,7 @@ public class AreaMiner extends Module {
 
     private final Setting<Double> turnSpeed = sgMining.add(new DoubleSetting.Builder()
         .name("turn-speed").description("Fastest you turn (degrees per tick). Turns speed up and slow down smoothly like a hand on a mouse; lower looks calmer.")
-        .defaultValue(9).range(2, 90).sliderRange(4, 40).build());
+        .defaultValue(14).range(2, 90).sliderRange(4, 40).build());
 
     private final Setting<Boolean> humanize = sgMining.add(new BoolSetting.Builder()
         .name("humanize").description("Slight wobble while aiming, a random spot on each block, and short random pauses between blocks.")
@@ -149,7 +148,8 @@ public class AreaMiner extends Module {
     private java.util.Map<String, Object> savedBaritone;
     private BlockPos startStand, lastPos, descendSpot;
     private boolean baritone;
-    private boolean picked1;
+    private boolean picked1, picked2, clickHeld;
+    private int countdown = -1;
     private BlockPos mining;
     private long lastClickTick = -1;
     private int waitTicks;
@@ -158,7 +158,7 @@ public class AreaMiner extends Module {
     private Vec3d aimOffset = Vec3d.ZERO;
 
     public AreaMiner() {
-        super(AddonTemplate.AUTOMATION, "area-miner", "Clears an area between two corners in 3x3 tunnels (made for 3x3 pickaxes).");
+        super(AddonTemplate.AUTOMATION, "area-miner", "Clears out a box between two corners you left-click. Mines with a real held left click, so keep the game window focused.");
     }
 
     @Override
@@ -207,33 +207,32 @@ public class AreaMiner extends Module {
     @Override
     public void onActivate() {
         phase = Phase.SELECT;
-        picked1 = false;
+        picked1 = picked2 = false;
+        countdown = -1;
         mining = null;
-        ChatUtils.info("Area Miner: left-click the START block, right-click the END block, then sneak + right-click to start. (Steps are shown on screen.)");
-        if (isSet(corner1) && isSet(corner2)) ChatUtils.info("(Your last area is still set: sneak + right-click to mine it again.)");
+        ChatUtils.info("Area Miner: left-click one corner of the area, then left-click the opposite corner. Mining starts 3 seconds later.");
+        if (isSet(corner1) && isSet(corner2)) ChatUtils.info("(Your last area is still saved: press Start mining in the module to mine it again.)");
     }
 
     @EventHandler
     private void onLeftClick(StartBreakingBlockEvent event) {
         if (phase != Phase.SELECT) return;
         event.cancel();
-        corner1.set(event.blockPos);
-        picked1 = true;
-        ChatUtils.info("START: %s%s", event.blockPos.toShortString(), sizeText());
-    }
-
-    @EventHandler
-    private void onRightClick(InteractBlockEvent event) {
-        if (phase != Phase.SELECT) return;
-        event.cancel();
-        if (mc.world.getTime() == lastClickTick) return;
-        lastClickTick = mc.world.getTime();
-        if (mc.player.isSneaking()) {
-            beginMining();
+        // one pick per click: holding the button would fire this every tick
+        if (clickHeld) return;
+        clickHeld = true;
+        if (!picked1 || picked2) {
+            corner1.set(event.blockPos);
+            picked1 = true;
+            picked2 = false;
+            countdown = -1;
+            ChatUtils.info("Corner 1: %s. Now left-click the opposite corner.", event.blockPos.toShortString());
             return;
         }
-        corner2.set(event.result.getBlockPos());
-        ChatUtils.info("END: %s%s. Sneak + right-click to start.", corner2.get().toShortString(), sizeText());
+        corner2.set(event.blockPos);
+        picked2 = true;
+        countdown = 60;
+        ChatUtils.info("Corner 2: %s%s. Mining starts in 3 seconds - left-click again to redo the corners.", event.blockPos.toShortString(), sizeText());
     }
 
     private void beginMining() {
@@ -250,6 +249,7 @@ public class AreaMiner extends Module {
         startStand = new BlockPos(clampX(minX + 1), maxY + 1, rowZ);
         bandBottom = maxY + 1;
         phase = Phase.GOTO_START;
+        countdown = -1;
         startTotal = -1;
         refreshPreview();
         startTotal = remaining;
@@ -260,7 +260,7 @@ public class AreaMiner extends Module {
         if (baritone) {
             if (humanWalk.get() && savedBaritone == null) savedBaritone = BaritoneBridge.apply(BaritoneBridge.humanWalking());
             BaritoneBridge.command("goto " + startStand.getX() + " " + startStand.getY() + " " + startStand.getZ());
-        } else ChatUtils.info("Walk to the green marker on top of the area to start (Baritone didn't load, so it can't walk you there).");
+        } else ChatUtils.info("Walking to the start (green marker on top of the area). If something's in the way, walk there yourself.");
         ChatUtils.info("Area Miner: mining %d x %d x %d blocks.", maxX - minX + 1, maxY - minY + 1, maxZ - minZ + 1);
     }
 
@@ -280,7 +280,8 @@ public class AreaMiner extends Module {
     private void release() {
         if (mc.options == null) return;
         mc.options.forwardKey.setPressed(false);
-        if (mc.interactionManager != null) mc.interactionManager.cancelBlockBreaking();
+        mc.options.jumpKey.setPressed(false);
+        mc.options.attackKey.setPressed(false);
     }
 
     private void stop(String why) {
@@ -293,6 +294,11 @@ public class AreaMiner extends Module {
         if (mc.player != null && mc.world != null && ++previewTicks >= 10) {
             previewTicks = 0;
             refreshPreview();
+        }
+        if (!mc.options.attackKey.isPressed()) clickHeld = false;
+        if (phase == Phase.SELECT && countdown > 0 && --countdown == 0) {
+            countdown = -1;
+            beginMining();
         }
         if (mc.player == null || mc.world == null || phase == Phase.SELECT) return;
 
@@ -315,9 +321,10 @@ public class AreaMiner extends Module {
         if (phase == Phase.GOTO_START) {
             if (arrived(startStand) && mc.player.isOnGround()) {
                 if (baritone) BaritoneBridge.command("stop");
+                release();
                 phase = Phase.DESCEND;
                 descendSpot = startStand;
-            }
+            } else if (!baritone) walkTo(startStand);
             return;
         }
 
@@ -334,6 +341,7 @@ public class AreaMiner extends Module {
         }
 
         holdPickaxe();
+        mc.options.attackKey.setPressed(false);
         if (waitTicks > 0) {
             waitTicks--;
             return;
@@ -446,6 +454,8 @@ public class AreaMiner extends Module {
             if (threeByThree && u == Direction.UP && breaksFloor(p)) score -= 100;
             Vec3d seen = seenPoint(p);
             if (seen != null) score += 1000;
+            // same priority as before; among equals take the block nearest the crosshair so it sweeps instead of swinging around
+            score = score * 200 - (int) lookAngle(seen != null ? seen : Vec3d.ofCenter(p));
             if (score > best) {
                 best = score;
                 target = p;
@@ -508,21 +518,28 @@ public class AreaMiner extends Module {
             mining = pos;
             aimOffset = humanize.get() && pickaxe.get() != Pickaxe.ThreeByThree ? new Vec3d(rng.nextDouble() - 0.5, rng.nextDouble() - 0.5, rng.nextDouble() - 0.5).multiply(0.5) : Vec3d.ZERO;
         }
-        HitResult seen = mc.player.raycast(mc.player.getBlockInteractionRange(), 1, false);
         Vec3d aim = point.add(aimOffset.multiply(0.3));
         turnTowards(hits(mc.player.getEyePos(), aim, pos) ? aim : point);
-        if (!(seen instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK || !hit.getBlockPos().equals(pos)) return;
-        if (mc.interactionManager.updateBlockBreakingProgress(pos, hit.getSide())) mc.player.swingHand(Hand.MAIN_HAND);
+        // Hold left click only while the crosshair is on this block; the game itself does the breaking, like a real player
+        HitResult seen = mc.player.raycast(mc.player.getBlockInteractionRange(), 1, false);
+        mc.options.attackKey.setPressed(seen instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(pos));
     }
 
     private void walkTo(BlockPos pos) {
         mining = null;
+        mc.options.attackKey.setPressed(false);
         Vec3d c = Vec3d.ofBottomCenter(pos);
         double dx = c.x - mc.player.getX(), dz = c.z - mc.player.getZ();
         float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
         float yawErr = Math.abs(MathHelper.wrapDegrees(yaw - mc.player.getYaw()));
         turnTowardsAngles(yaw, 15);
         mc.options.forwardKey.setPressed(Math.hypot(dx, dz) > 0.2 && yawErr < 35);
+        mc.options.jumpKey.setPressed(mc.player.horizontalCollision && mc.player.isOnGround());
+    }
+
+    private double lookAngle(Vec3d target) {
+        Vec3d d = target.subtract(mc.player.getEyePos()).normalize();
+        return Math.toDegrees(Math.acos(MathHelper.clamp(d.dotProduct(mc.player.getRotationVector()), -1, 1)));
     }
 
     private boolean turnTowards(Vec3d target) {
@@ -641,7 +658,7 @@ public class AreaMiner extends Module {
         if (preview.get() && isActive() && !previewList.isEmpty()) renderPreview(event);
         if (!showArea.get()) return;
         BlockPos a = corner1.get(), b = corner2.get();
-        if (isActive() && phase == Phase.SELECT && picked1 && mc.crosshairTarget instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK) b = hit.getBlockPos();
+        if (isActive() && phase == Phase.SELECT && picked1 && !picked2 && mc.crosshairTarget instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK) b = hit.getBlockPos();
         if (a.equals(BlockPos.ORIGIN) && b.equals(BlockPos.ORIGIN)) return;
         Box box = new Box(Math.min(a.getX(), b.getX()), Math.min(a.getY(), b.getY()), Math.min(a.getZ(), b.getZ()),
             Math.max(a.getX(), b.getX()) + 1, Math.max(a.getY(), b.getY()) + 1, Math.max(a.getZ(), b.getZ()) + 1);
@@ -667,17 +684,18 @@ public class AreaMiner extends Module {
             List<String> lines = new ArrayList<>();
             lines.add(text);
             if (pauseReason != null) lines.add("  PAUSED: " + pauseReason);
-            else if (phase == Phase.GOTO_START) lines.add(baritone ? "  walking to the start (green marker)" : "  walk to the green marker to start");
+            else if (phase == Phase.GOTO_START) lines.add("  walking to the start (green marker)");
             Automation.status(event.drawContext, "Area Miner", lines, 0xFF8FD8FF);
         }
         if (!isActive() || phase != Phase.SELECT) return;
-        boolean s1 = isSet(corner1) && picked1, s2 = isSet(corner2) && s1;
+        boolean s1 = picked1, s2 = picked1 && picked2;
         String[] lines = {
-            "AREA MINER - set your area",
-            (s1 ? "[done] " : "> ") + "1. Left-click the START block" + (s1 ? "  (" + corner1.get().toShortString() + ")" : ""),
-            (s2 ? "[done] " : s1 ? "> " : "   ") + "2. Right-click the END block" + (s2 ? "  (" + corner2.get().toShortString() + ")" : ""),
-            (s2 ? "> " : "   ") + "3. Sneak + right-click to start mining" + (s2 ? sizeText().replace(" - ", "  (") + ")" : ""),
-            remaining >= 0 && s2 ? "   Preview: " + remaining + " blocks to mine (shown in blue, ores in gold)" : "",
+            "AREA MINER - pick your area",
+            (s1 ? "[done] " : "> ") + "1. Left-click one corner" + (s1 ? "  (" + corner1.get().toShortString() + ")" : ""),
+            (s2 ? "[done] " : s1 ? "> " : "   ") + "2. Left-click the opposite corner" + (s2 ? "  (" + corner2.get().toShortString() + ")" : ""),
+            s2 ? "> Starting in " + (countdown + 19) / 20 + "..." + sizeText().replace(" - ", "  (") + ")" : "   3. Mining starts by itself",
+            s2 ? "   Left-click again to redo the corners" : "",
+            remaining >= 0 && s2 ? "   " + remaining + " blocks to mine (blue, ores in gold)" : "",
         };
         lines = java.util.Arrays.stream(lines).filter(l -> !l.isEmpty()).toArray(String[]::new);
         int w = 0;

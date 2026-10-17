@@ -32,9 +32,8 @@ dependencies {
 
     // Meteor
     modImplementation(libs.meteor.client)
-    // Baritone (LGPL-3.0), bundled inside the addon jar; it already carries nether-pathfinder
+    // Baritone (LGPL-3.0): dev runs only, not bundled; players install it themselves
     modLocalRuntime("meteordevelopment:baritone:1.21.11-SNAPSHOT")
-    include("meteordevelopment:baritone:1.21.11-SNAPSHOT")
     localRuntime("dev.babbaj:nether-pathfinder:1.4.1") // dev runs don't unpack nested jars
 
     // MP3 decoding for custom hit sounds, bundled inside the addon jar

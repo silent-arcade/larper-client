@@ -28,7 +28,8 @@
     "MouseMixin",
     "CameraMixin",
     "FogRendererLarperMixin",
-    "ElytraFeatureRendererMixin"
+    "ElytraFeatureRendererMixin",
+    "EndCrystalEntityRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

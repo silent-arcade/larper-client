@@ -43,7 +43,11 @@ public class SilentAnchor extends SilentBase {
     @EventHandler
     private void onTick(TickEvent.Pre event) {
         if (timer > 0 && --timer > 0) return;
-        if (!held() || !(mc.crosshairTarget instanceof BlockHitResult hit) || hit.getType() == BlockHitResult.Type.MISS) return;
+        if (!held()) {
+            releaseSlot();
+            return;
+        }
+        if (!(mc.crosshairTarget instanceof BlockHitResult hit) || hit.getType() == BlockHitResult.Type.MISS) return;
         if (mc.world.getRegistryKey() == World.NETHER) {
             if (!warned) warning("Anchors don't explode in the Nether.");
             warned = true;
@@ -57,7 +61,7 @@ public class SilentAnchor extends SilentBase {
         if (!state.isOf(Blocks.RESPAWN_ANCHOR)) {
             FindItemResult anchor = InvUtils.findInHotbar(Items.RESPAWN_ANCHOR);
             if (!anchor.found() || !glow.found()) return;
-            use(anchor.slot(), hit);
+            if (!use(anchor.slot(), hit)) return;
             timer = delay(placeDelay.get());
             if (fast()) {
                 BlockPos placed = state.isReplaceable() ? pos : pos.offset(hit.getSide());
@@ -67,7 +71,7 @@ public class SilentAnchor extends SilentBase {
             }
         } else if (state.get(RespawnAnchorBlock.CHARGES) == 0) {
             if (!glow.found()) return;
-            use(glow.slot(), hit);
+            if (!use(glow.slot(), hit)) return;
             timer = delay(chargeDelay.get());
         } else if (explode(pos, hit)) timer = delay(explodeDelay.get());
     }
@@ -77,7 +81,6 @@ public class SilentAnchor extends SilentBase {
         FindItemResult with = InvUtils.findInHotbar(Items.TOTEM_OF_UNDYING);
         if (!with.found()) with = InvUtils.findInHotbar(st -> !st.isOf(Items.GLOWSTONE));
         if (!with.found()) return false;
-        use(with.slot(), hit);
-        return true;
+        return use(with.slot(), hit);
     }
 }
