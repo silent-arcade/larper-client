@@ -27,8 +27,17 @@ public final class Fx {
         return System.nanoTime() / 1e9;
     }
 
+    // where an entity is drawn; for you that includes Target Strafe's visual circling, so effects on you follow your model
     public static Vec3d pos(Entity e, float tickDelta) {
-        return e.getLerpedPos(tickDelta);
+        Vec3d p = e.getLerpedPos(tickDelta);
+        return e == MinecraftClient.getInstance().player ? p.add(visualOffset(tickDelta)) : p;
+    }
+
+    // how far your drawn player is from where you really are (Target Strafe's visual circling)
+    public static Vec3d visualOffset(float tickDelta) {
+        if (meteordevelopment.meteorclient.systems.modules.Modules.get() == null) return Vec3d.ZERO;
+        com.example.addon.modules.TargetStrafe ts = meteordevelopment.meteorclient.systems.modules.Modules.get().get(com.example.addon.modules.TargetStrafe.class);
+        return ts == null ? Vec3d.ZERO : ts.offset(tickDelta);
     }
 
     private static Vec3d[] facing() {

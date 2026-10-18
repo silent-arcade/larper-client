@@ -20,6 +20,9 @@ public class ElytraJump extends Module {
     private final Setting<Boolean> atTop = sg.add(new BoolSetting.Builder()
         .name("open-at-top").description("Opens the elytra at the top of your jump instead of straight away.").defaultValue(true).build());
 
+    private final Setting<Boolean> holdJump = sg.add(new BoolSetting.Builder()
+        .name("only-while-holding-jump").description("Only opens if you're still holding jump when it's time to open, so tapping space is a normal jump and holding it takes off.").defaultValue(true).build());
+
     private final Setting<Boolean> firework = sg.add(new BoolSetting.Builder()
         .name("auto-firework").description("Fires a rocket from your hotbar as soon as the elytra opens, so you take off from a standing jump.").defaultValue(false).build());
 
@@ -53,6 +56,7 @@ public class ElytraJump extends Module {
         }
         if (!jumped || atTop.get() && mc.player.getDeltaMovement().y > 0) return;
         jumped = false;
+        if (holdJump.get() && !mc.options.keyJump.isDown()) return;
         // same as the vanilla mid-air jump press
         if (mc.player.tryToStartFallFlying()) {
             mc.getConnection().send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));

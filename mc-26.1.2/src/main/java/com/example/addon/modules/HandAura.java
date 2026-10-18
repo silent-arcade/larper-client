@@ -166,7 +166,7 @@ public class HandAura extends VisualModule {
             Vec3 forward = new Vec3(-Math.sin(yaw), 0, Math.cos(yaw));
             Vec3 right = new Vec3(-Math.cos(yaw), 0, -Math.sin(yaw));
             double height = mc.player.isShiftKeyDown() ? 0.55 : 0.72;
-            hand = mc.player.getPosition(1).add(right.scale(0.37 * side)).add(forward.scale(0.08)).add(0, height, 0);
+            hand = com.example.addon.visuals.Fx.pos(mc.player, 1).add(right.scale(0.37 * side)).add(forward.scale(0.08)).add(0, height, 0);
             a = right;
             b = forward;
         }

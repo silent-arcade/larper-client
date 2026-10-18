@@ -47,6 +47,10 @@ public abstract class LivingEntityRendererMixin {
         if (wings != null && wings.isActive() && wings.halo() && entity == MinecraftClient.getInstance().player) {
             cs.larper$setWings(wings.time(), 1, true, -1, wings.haloColor());
         }
+        com.example.addon.modules.SpinBot spin = Modules.get().get(com.example.addon.modules.SpinBot.class);
+        if (spin != null && spin.isActive() && entity == MinecraftClient.getInstance().player) spin.apply(state);
+        com.example.addon.modules.TargetStrafe strafe = Modules.get().get(com.example.addon.modules.TargetStrafe.class);
+        if (strafe != null && strafe.isActive() && entity == MinecraftClient.getInstance().player) strafe.apply(state, tickDelta);
         CinematicDeath cd = Modules.get().get(CinematicDeath.class);
         if (cd == null || !cd.isActive()) return;
 

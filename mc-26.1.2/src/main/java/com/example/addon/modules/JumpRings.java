@@ -80,7 +80,7 @@ public class JumpRings extends VisualModule {
     }
 
     private void add(double scale) {
-        rings.add(new Ring(mc.player.position().add(0, 0.02, 0), Fx.time(), scale));
+        rings.add(new Ring(Fx.pos(mc.player, 1).add(0, 0.02, 0), Fx.time(), scale));
     }
 
     private void star(Render3DEvent event, Vec3 c, double r, double turn, java.util.function.DoubleFunction<Color> col) {

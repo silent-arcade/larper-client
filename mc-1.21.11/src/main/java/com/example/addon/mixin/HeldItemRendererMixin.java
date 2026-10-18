@@ -44,7 +44,7 @@ public abstract class HeldItemRendererMixin {
     @Inject(method = "renderItem(Lnet/minecraft/entity/LivingEntity;Lnet/minecraft/item/ItemStack;Lnet/minecraft/item/ItemDisplayContext;Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;I)V", at = @At("HEAD"), cancellable = true)
     private void larper$renderKnife(LivingEntity entity, ItemStack stack, ItemDisplayContext ctx, MatrixStack matrices, OrderedRenderCommandQueue queue, int light, CallbackInfo ci) {
         HandAura aura = Modules.get().get(HandAura.class);
-        HandTint.itemColor = ctx.isFirstPerson() && aura != null && !KnifeType.isKnife(stack) && !stack.isOf(net.minecraft.item.Items.TOTEM_OF_UNDYING) ? aura.itemColor() : 0;
+        HandTint.itemColor = ctx.isFirstPerson() && aura != null && !KnifeType.isKnife(stack) && !stack.isOf(net.minecraft.item.Items.TOTEM_OF_UNDYING) ? com.example.addon.modules.ShaderHands.itemTint(aura) : 0;
 
         if (larper$renderingParts || !ctx.isFirstPerson() || !KnifeType.isKnife(stack)) return;
         Knife knife = Modules.get().get(Knife.class);

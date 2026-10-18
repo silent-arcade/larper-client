@@ -55,7 +55,7 @@ public class ChinaHat extends VisualModule {
         if (mc.player == null || (!firstPerson.get() && mc.options.getCameraType().isFirstPerson())) return;
         float pitch = mc.player.getViewXRot(event.tickDelta), yaw = mc.player.getViewYRot(event.tickDelta);
         Vec3 up = Vec3.directionFromRotation(pitch - 90, yaw), side = Vec3.directionFromRotation(0, yaw + 90), fwd = up.cross(side);
-        Vec3 base = mc.player.getEyePosition(event.tickDelta).add(up.scale(0.3));
+        Vec3 base = mc.player.getEyePosition(event.tickDelta).add(com.example.addon.visuals.Fx.visualOffset(event.tickDelta)).add(up.scale(0.3));
         Vec3 apex = base.add(up.scale(tip.get()));
         double r = width.get(), t = Fx.time() * spin.get();
         if (style.get() != Style.Cone) {

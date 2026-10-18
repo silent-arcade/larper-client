@@ -1,26 +1,26 @@
 package com.example.addon.modules;
 
 import com.example.addon.AddonTemplate;
-import meteordevelopment.meteorclient.events.world.TickEvent;
-import meteordevelopment.meteorclient.settings.BoolSetting;
+import com.example.addon.visuals.Fx;
 import meteordevelopment.meteorclient.settings.EnumSetting;
 import meteordevelopment.meteorclient.settings.IntSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
-import meteordevelopment.meteorclient.utils.player.Rotations;
-import meteordevelopment.orbit.EventHandler;
-
-import java.util.Random;
+import net.minecraft.client.render.entity.state.LivingEntityRenderState;
 
 public class SpinBot extends Module {
     public enum Mode { Spin, Jitter, Random, Backwards, Sway, Helicopter }
     public enum Pitch { Keep, Down, Up, Nod, Random }
+    public enum Side { Client, Server }
 
     private final SettingGroup sg = settings.getDefaultGroup();
 
+    private final Setting<Side> side = sg.add(new EnumSetting.Builder<Side>()
+        .name("side").description("Client: only your own model spins on your screen (see it in F5), nothing is sent. Server: your head really spins for everyone; your own view stays still.").defaultValue(Side.Client).build());
+
     private final Setting<Mode> mode = sg.add(new EnumSetting.Builder<Mode>()
-        .name("mode").description("Spin: turns round and round. Jitter: snaps left and right. Random: a new direction every tick. Backwards: always facing behind you. Sway: swings side to side. Helicopter: very fast spin with your head down.").defaultValue(Mode.Spin).build());
+        .name("mode").description("Spin: turns round and round. Jitter: quick wiggle left and right. Random: wanders around smoothly. Backwards: your body faces behind you. Sway: swings side to side. Helicopter: very fast spin with your head down.").defaultValue(Mode.Spin).build());
 
     private final Setting<Integer> speed = sg.add(new IntSetting.Builder()
         .name("speed").description("How fast (degrees per tick for Spin, swing size for Jitter and Sway).").defaultValue(30).range(1, 180).sliderRange(5, 90).build());
@@ -28,44 +28,46 @@ public class SpinBot extends Module {
     private final Setting<Pitch> pitch = sg.add(new EnumSetting.Builder<Pitch>()
         .name("pitch").description("Where your head points up and down.").defaultValue(Pitch.Keep).build());
 
-    private final Setting<Boolean> pauseOnUse = sg.add(new BoolSetting.Builder()
-        .name("pause-when-using").description("Stops while you eat, drink, place, mine or attack, so those still aim where you look.").defaultValue(true).build());
-
-    private final Random rng = new Random();
-    private float yaw;
-    private int t;
-
     public SpinBot() {
-        super(AddonTemplate.CATEGORY, "spin-bot", "Spins, jitters or sways your head for other players with six modes. Your own view doesn't move.");
+        super(AddonTemplate.CATEGORY, "spin-bot", "Spins, jitters or sways your head. Client: only your own model on your screen (see it in F5). Server: your head really spins for everyone, while your view stays still.");
     }
 
-    @Override
-    public void onActivate() {
-        if (mc.player != null) yaw = mc.player.getYaw();
+    // Server side: send the spin as your rotation (lowest priority, so auras and placing still aim where they need)
+    @meteordevelopment.orbit.EventHandler
+    private void onTick(meteordevelopment.meteorclient.events.world.TickEvent.Pre event) {
+        if (side.get() != Side.Server || mc.player == null) return;
+        float[] a = angles(mc.player.getYaw(), mc.player.getPitch());
+        meteordevelopment.meteorclient.utils.player.Rotations.rotate(a[0], a[1], -100);
     }
 
-    @EventHandler
-    private void onTick(TickEvent.Pre event) {
-        if (mc.player == null) return;
-        if (pauseOnUse.get() && (mc.player.isUsingItem() || mc.options.attackKey.isPressed() || mc.options.useKey.isPressed())) return;
-        t++;
-        float look = mc.player.getYaw(), s = speed.get();
+    // called when your player is about to be drawn; only changes how it looks on your screen
+    public void apply(LivingEntityRenderState state) {
+        if (side.get() != Side.Client) return;
+        float[] a = angles(state.bodyYaw, state.pitch);
+        state.bodyYaw = a[0];
+        state.relativeHeadYaw = 0;
+        state.pitch = a[1];
+    }
+
+    private float[] angles(float baseYaw, float basePitch) {
+        double t = Fx.time() * 20, s = speed.get();
         float y = switch (mode.get()) {
-            case Spin -> yaw = (yaw + s) % 360;
-            case Helicopter -> yaw = (yaw + Math.max(s, 60)) % 360;
-            case Jitter -> look + (t % 2 == 0 ? s : -s);
-            case Random -> rng.nextFloat() * 360;
-            case Backwards -> look + 180;
-            case Sway -> look + (float) Math.sin(t * 0.25) * s;
+            case Spin -> (float) (t * s % 360);
+            case Helicopter -> (float) (t * Math.max(s, 60) % 360);
+            // eased wiggle instead of snapping, so it stays smooth
+            case Jitter -> baseYaw + (float) (Math.sin(t * 1.4) * s);
+            // a few slow waves mixed together wander around smoothly but never repeat in an obvious way
+            case Random -> baseYaw + (float) ((Math.sin(t * 0.11) + Math.sin(t * 0.173 + 1.3) + Math.sin(t * 0.071 + 2.1)) * 60);
+            case Backwards -> baseYaw + 180;
+            case Sway -> baseYaw + (float) (Math.sin(t * 0.25) * s);
         };
         float p = mode.get() == Mode.Helicopter ? 90 : switch (pitch.get()) {
-            case Keep -> mc.player.getPitch();
+            case Keep -> basePitch;
             case Down -> 90;
             case Up -> -90;
             case Nod -> (float) (Math.sin(t * 0.5) * 90);
-            case Random -> rng.nextFloat() * 180 - 90;
+            case Random -> (float) ((Math.sin(t * 0.13 + 0.7) + Math.sin(t * 0.21)) * 40);
         };
-        // lowest priority, so anything that really needs to aim (auras, placing) wins
-        Rotations.rotate(y, p, -100);
+        return new float[] {y, p};
     }
 }

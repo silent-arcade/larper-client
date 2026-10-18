@@ -4,7 +4,11 @@
 
 **Free to use.** Download it, use it, change it and share it. See [License](#license).
 
-![Wing styles: Dragon, Mech, Inferno and Shadow](wings-preview.webp)
+| | |
+|---|---|
+| ![Sky Shaders: aurora and lightning in the Rainbow theme](screenshots/sky-shaders.png) | ![Crystal FX: themed outline and recolour](screenshots/crystal-fx.png) |
+| ![Hit Particles: spark burst, impact ring, star and slash](screenshots/hit-particles.png) | ![Schematic Builder: ghost-block preview](screenshots/schematic-preview.png) |
+| ![Wings following your model with Target Strafe](screenshots/wings-strafe.png) | |
 
 ## Download
 
@@ -44,6 +48,8 @@ Custom Sky also needs the [Skyboxify](https://modrinth.com/mod/skyboxify) mod.
 | Compass | A compass strip with directions and degrees |
 | BPS | Your speed in blocks per second |
 | Hit Sounds | Your own sound when a hit lands |
+| Sky Shaders | Shader-style sky: shifting colour glow, flowing nebula waves, a galaxy band, northern-lights aurora, a swirling vortex and thunderstorms, in any theme |
+| Shader Hands | Your hand and held item flow through the Sky Shaders colours (or their own theme) |
 | TNT Timer | Big countdown over lit TNT with a blast-radius ring, pulsing outline and fuse sparks |
 | Hit Particles | Spark burst, impact ring, star flash and slash on every hit, bigger on crits |
 | Skeleton ESP | A themed stick-figure skeleton inside every player that moves with them, through walls |
@@ -57,7 +63,7 @@ Custom Sky also needs the [Skyboxify](https://modrinth.com/mod/skyboxify) mod.
 | Anime FX | Manga speed lines when you go fast and impact frames when you hit |
 | Electric Aura | Lightning arcs crackling around you |
 | Energy Shield | A glowing bubble or hex force field around you that ripples when you get hit |
-| Shooting Stars | Shooting stars, meteor showers and comets across the sky |
+| Shooting Stars | Shooting stars in six styles (classic, comet, fireball, neon, rainbow, mixed) with meteor showers |
 | Screen Shaders | Chromatic, retro CRT, dreamy glow, movie grade, noir, vaporwave, comic or custom |
 | Player Model | Wear a Figura avatar (.zip) or Blockbench model: put it in `.minecraft/larper-client/models` |
 | Camera Tilt | The camera leans into strafes and turns |
@@ -92,10 +98,11 @@ Custom Sky also needs the [Skyboxify](https://modrinth.com/mod/skyboxify) mod.
 | Region Route | **DonutSMP:** which way and how far to any region, with blocks N/S/E/W, nether coordinates and a waypoint. Also the `.region` command (`.region 5`, `.region 28 5`) |
 | Ore Sim | Shows where ores generate from the world seed (`.seed <seed>`). Ported from Meteor Rejects |
 | Turn Off All | Turns off every module at once |
+| Target Strafe | Strafes round the nearest target facing it, hopping and switching left and right. Client: a visual only you see. Server: really strafes with A/D |
 | Triggerbot | Clicks for you when your crosshair is on a target: full-charge hits, smart crits, random reaction time, skips shields |
 | Auto Mace | Swaps to your best mace when you fall onto someone, with optional auto-hit |
 | Shield Breaker | Swaps to an axe to disable a blocking player's shield, and can break shields automatically |
-| Spin Bot | Spins, jitters or sways your head for other players (six modes); your view doesn't move |
+| Spin Bot | Spins, jitters or sways your head (six modes). Client: only your own model on your screen. Server: everyone sees it while your view stays still |
 | Elytra Jump | Opens your elytra when you jump and can fire a rocket to take off from the ground |
 | Snap Tap | Holding A and D (or W and S), the key you pressed last wins |
 | Key Pearl | Throws an ender pearl from your hotbar on a key |

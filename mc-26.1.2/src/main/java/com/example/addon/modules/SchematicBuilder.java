@@ -77,6 +77,7 @@ public class SchematicBuilder extends Module {
     public enum Turn { None, Right90, Turn180, Left90 }
     public enum Speed { Human, Fast, VeryFast }
     public enum LayerView { All, Current, UpToCurrent }
+    public enum PreviewStyle { Ghost, Boxes }
 
     private static final String[] EXTENSIONS = {".litematic", ".schem", ".nbt"};
     private static final Set<String> FREE_PROPS = Set.of("waterlogged", "powered", "power", "lit", "shape", "north", "south", "east", "west",
@@ -171,6 +172,23 @@ public class SchematicBuilder extends Module {
 
     private final Setting<SettingColor> supportColor = sgPreview.add(new ColorSetting.Builder()
         .name("support-color").description("Temporary support blocks.").defaultValue(new SettingColor(255, 150, 40, 70)).visible(preview::get).build());
+
+    private final Setting<PreviewStyle> previewStyle = sgPreview.add(new EnumSetting.Builder<PreviewStyle>()
+        .name("preview-style").description("Ghost: see-through copies of the real blocks in their real shape and colour, like Litematica. Boxes: simple coloured boxes.").defaultValue(PreviewStyle.Ghost).visible(preview::get).build());
+
+    private final Setting<Integer> ghostOpacity = sgPreview.add(new IntSetting.Builder()
+        .name("ghost-opacity").description("How solid the ghost blocks look.").defaultValue(130).range(20, 255).sliderRange(40, 220)
+        .visible(() -> preview.get() && previewStyle.get() == PreviewStyle.Ghost).build());
+
+    private final Setting<SettingColor> ghostTint = sgPreview.add(new ColorSetting.Builder()
+        .name("ghost-tint").description("Colour mixed into the ghost blocks so they stand out from real blocks (alpha = how much). Set alpha to 0 for the blocks' own colours.")
+        .defaultValue(new SettingColor(90, 180, 255, 90)).visible(() -> preview.get() && previewStyle.get() == PreviewStyle.Ghost).build());
+
+    private final Setting<Boolean> ghostEdges = sgPreview.add(new BoolSetting.Builder()
+        .name("ghost-edges").description("A crisp outline round every ghost block's shape.").defaultValue(true).visible(() -> preview.get() && previewStyle.get() == PreviewStyle.Ghost).build());
+
+    private final Setting<Boolean> fadeAbove = sgPreview.add(new BoolSetting.Builder()
+        .name("fade-layers-above").description("Blocks above the layer being built are drawn fainter, so the current layer is easy to read.").defaultValue(true).visible(preview::get).build());
 
     private final Setting<SettingColor> wrongStateColor = sgPreview.add(new ColorSetting.Builder()
         .name("wrong-rotation-color").description("The right block, but facing the wrong way or in the wrong state.").defaultValue(new SettingColor(255, 170, 30, 70)).visible(preview::get).build());
@@ -1456,6 +1474,9 @@ public class SchematicBuilder extends Module {
     }
 
     private final List<Map.Entry<Item, Integer>> needList = new ArrayList<>();
+    private final Set<Long> ghostSet = new HashSet<>();
+    private final Map<BlockState, List<float[]>> ghostCache = new HashMap<>();
+    private static final Direction[] FACES = {null, Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST};
     private int currentLayer = Integer.MIN_VALUE;
 
     private void refreshPreview() {
@@ -1481,6 +1502,11 @@ public class SchematicBuilder extends Module {
             if (done(t)) continue;
             previewList.add(t);
         }
+        ghostSet.clear();
+        for (Target t : previewList) {
+            BlockState here = mc.level.getBlockState(t.pos());
+            if (here.isAir() || here.canBeReplaced()) ghostSet.add(t.pos().asLong());
+        }
         if (previewList.size() > maxBlocks.get()) {
             previewList.sort(Comparator.comparingDouble(t -> t.pos().distSqr(me)));
             previewList.subList(maxBlocks.get(), previewList.size()).clear();
@@ -1505,6 +1531,10 @@ public class SchematicBuilder extends Module {
             boolean sameBlock = here.getBlock() == t.state().getBlock();
             boolean isWrong = !here.isAir() && !here.canBeReplaced() && !sameBlock;
             SettingColor fill = isWrong ? wrong : sameBlock ? rot : miss, line = isWrong ? wrongLine : sameBlock ? rotLine : missLine;
+            if (previewStyle.get() == PreviewStyle.Ghost && ghostSet.contains(t.pos().asLong())) {
+                drawGhost(event, t);
+                continue;
+            }
             // show the real shape (slabs, stairs, fences...) instead of a full cube where it has one
             AABB shape = shapeOf(t);
             event.renderer.box(shape, fill, line, ShapeMode.Both, 0);
@@ -1522,6 +1552,56 @@ public class SchematicBuilder extends Module {
         AABB b = outline.bounds();
         if (b.getXsize() < 0.05 || b.getYsize() < 0.05 || b.getZsize() < 0.05) return new AABB(t.pos());
         return b.move(t.pos());
+    }
+
+    // the block's real model as plain quads: 12 floats for the corners, then its cull side (-1 = none), then which way it faces
+    private List<float[]> ghostQuads(BlockState s) {
+        return ghostCache.computeIfAbsent(s, st -> {
+            List<float[]> out = new ArrayList<>();
+            List<net.minecraft.client.renderer.block.dispatch.BlockStateModelPart> parts = new ArrayList<>();
+            mc.getModelManager().getBlockStateModelSet().get(st).collectParts(net.minecraft.util.RandomSource.create(42), parts);
+            for (var part : parts) {
+                for (Direction d : FACES) for (var q : part.getQuads(d)) {
+                    out.add(new float[] {q.position0().x(), q.position0().y(), q.position0().z(), q.position1().x(), q.position1().y(), q.position1().z(),
+                        q.position2().x(), q.position2().y(), q.position2().z(), q.position3().x(), q.position3().y(), q.position3().z(),
+                        d == null ? -1 : d.ordinal(), q.direction().ordinal()});
+                }
+            }
+            return out;
+        });
+    }
+
+    // Litematica-style ghost: the real shape, coloured like the block, shaded per side like the game does, hidden behind terrain
+    private void drawGhost(Render3DEvent event, Target t) {
+        BlockPos p = t.pos();
+        int rgb = t.state().getMapColor(mc.level, p).col;
+        if (rgb == 0) rgb = 0xD8ECFF;
+        SettingColor tint = ghostTint.get();
+        double k = tint.a / 255.0;
+        int tr = (int) ((rgb >> 16 & 255) * (1 - k) + tint.r * k), tg = (int) ((rgb >> 8 & 255) * (1 - k) + tint.g * k), tb = (int) ((rgb & 255) * (1 - k) + tint.b * k);
+        boolean above = fadeAbove.get() && currentLayer != Integer.MAX_VALUE && p.getY() > currentLayer;
+        int a = above ? ghostOpacity.get() / 3 : ghostOpacity.get();
+        for (float[] q : ghostQuads(t.state())) {
+            if (q[12] >= 0) {
+                BlockPos n = p.relative(Direction.values()[(int) q[12]]);
+                // faces touching another ghost or a solid block can't be seen
+                if (ghostSet.contains(n.asLong()) || mc.level.getBlockState(n).isSolidRender()) continue;
+            }
+            float shade = switch (Direction.values()[(int) q[13]]) {
+                case UP -> 1f;
+                case DOWN -> 0.5f;
+                case NORTH, SOUTH -> 0.8f;
+                default -> 0.62f;
+            };
+            meteordevelopment.meteorclient.utils.render.color.Color c = new meteordevelopment.meteorclient.utils.render.color.Color(
+                (int) (tr * shade), (int) (tg * shade), (int) (tb * shade), a);
+            double x = p.getX(), y = p.getY(), z = p.getZ();
+            event.depthRenderer.quad(x + q[0], y + q[1], z + q[2], x + q[3], y + q[4], z + q[5], x + q[6], y + q[7], z + q[8], x + q[9], y + q[10], z + q[11], c, c, c, c);
+        }
+        if (ghostEdges.get()) {
+            SettingColor edge = new SettingColor(Math.min(255, tr + 70), Math.min(255, tg + 70), Math.min(255, tb + 70), above ? 70 : 200);
+            event.depthRenderer.box(shapeOf(t), edge, edge, ShapeMode.Lines, 0);
+        }
     }
 
     private static Direction facingOf(BlockState s) {
@@ -1596,8 +1676,8 @@ public class SchematicBuilder extends Module {
                 lines.add("  still to place (you have):");
                 int i = 0;
                 for (Map.Entry<Item, Integer> e : needList) {
-                    if (i++ == 4) {
-                        lines.add("    ... and " + (needList.size() - 4) + " more");
+                    if (i++ == 3) {
+                        lines.add("    ... and " + (needList.size() - 3) + " more");
                         break;
                     }
                     int have = count(e.getKey());

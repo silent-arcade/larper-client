@@ -105,6 +105,7 @@ public class AddonTemplate extends MeteorAddon {
         Modules.get().add(new com.example.addon.modules.ShieldBreaker());
         Modules.get().add(new com.example.addon.modules.AutoMace());
         Modules.get().add(new com.example.addon.modules.SpinBot());
+        Modules.get().add(new com.example.addon.modules.TargetStrafe());
         Modules.get().add(new com.example.addon.modules.ElytraJump());
         Modules.get().add(new com.example.addon.modules.SnapTap());
         Modules.get().add(new com.example.addon.modules.KeyPearl());
@@ -115,6 +116,8 @@ public class AddonTemplate extends MeteorAddon {
         Modules.get().add(new com.example.addon.modules.SkeletonESP());
         Modules.get().add(new com.example.addon.modules.Aspect());
         Modules.get().add(new com.example.addon.modules.Drugs());
+        Modules.get().add(new com.example.addon.modules.SkyShaders());
+        Modules.get().add(new com.example.addon.modules.ShaderHands());
 
         Commands.add(new CommandExample());
         Commands.add(new SeedCommand());

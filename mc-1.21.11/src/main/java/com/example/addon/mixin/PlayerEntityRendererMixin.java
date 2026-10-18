@@ -44,7 +44,7 @@ public abstract class PlayerEntityRendererMixin {
         if (avatar != null && ((PlayerEntityRenderer) (Object) this).getModel() instanceof net.minecraft.client.render.entity.model.BipedEntityModel<?> model
             && avatar.renderArm(matrices, queue, model, part == model.rightArm, light)) return;
         HandAura aura = Modules.get().get(HandAura.class);
-        int color = aura == null ? 0 : aura.handColor();
+        int color = com.example.addon.modules.ShaderHands.handTint(aura);
         if (color == 0) original.call(queue, part, matrices, layer, light, overlay, sprite);
         else queue.submitModelPart(part, matrices, layer, light, overlay, sprite, color, null);
     }

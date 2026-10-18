@@ -63,7 +63,7 @@ public class Footprints extends VisualModule {
     private void onTick(TickEvent.Post event) {
         if (mc.player == null) return;
         if (!mc.player.onGround() || mc.player.isShiftKeyDown() && mc.player.getDeltaMovement().horizontalDistanceSqr() < 1e-4) return;
-        Vec3 at = mc.player.position();
+        Vec3 at = Fx.pos(mc.player, 1);
         if (lastStep != null && lastStep.distanceTo(at) < 0.65 * size.get()) return;
         lastStep = at;
         left = !left;

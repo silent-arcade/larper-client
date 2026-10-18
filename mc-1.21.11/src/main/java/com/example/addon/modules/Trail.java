@@ -64,7 +64,7 @@ public class Trail extends VisualModule {
     @EventHandler
     private void onTick(TickEvent.Post event) {
         if (mc.player == null) return;
-        Vec3d p = mc.player.getEntityPos();
+        Vec3d p = Fx.pos(mc.player, 1);
         if (points.isEmpty() || points.peekLast().squaredDistanceTo(p) > 0.0025) points.addLast(p);
         else if (!points.isEmpty()) points.pollFirst();
         while (points.size() > length.get()) points.pollFirst();
