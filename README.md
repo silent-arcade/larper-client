@@ -6,9 +6,9 @@
 
 | | |
 |---|---|
-| ![Sky Shaders: aurora and lightning in the Rainbow theme](screenshots/sky-shaders.png) | ![Crystal FX: themed outline and recolour](screenshots/crystal-fx.png) |
-| ![Hit Particles: spark burst, impact ring, star and slash](screenshots/hit-particles.png) | ![Schematic Builder: ghost-block preview](screenshots/schematic-preview.png) |
-| ![Wings following your model with Target Strafe](screenshots/wings-strafe.png) | |
+| ![Sky Shaders: Rainbow theme on Ultra](screenshots/sky-rainbow.png) | ![Sky Shaders: Aurora](screenshots/aurora.png) |
+| ![Sky Shaders: Vortex](screenshots/vortex.png) | ![Crystal FX: themed outline and recolour](screenshots/crystal-fx.png) |
+| ![Hit Particles: spark burst, impact ring and slash](screenshots/hit-particles.png) | ![Wings following your model with Target Strafe](screenshots/wings-strafe.png) |
 
 ## Download
 
@@ -49,6 +49,7 @@ Custom Sky also needs the [Skyboxify](https://modrinth.com/mod/skyboxify) mod.
 | BPS | Your speed in blocks per second |
 | Hit Sounds | Your own sound when a hit lands |
 | Sky Shaders | Shader-style sky: shifting colour glow, flowing nebula waves, a galaxy band, northern-lights aurora, a swirling vortex and thunderstorms, in any theme |
+| Time Presets | Sunrise, Day, Sunset or Night on your screen only, in one click |
 | Shader Hands | Your hand and held item flow through the Sky Shaders colours (or their own theme) |
 | TNT Timer | Big countdown over lit TNT with a blast-radius ring, pulsing outline and fuse sparks |
 | Hit Particles | Spark burst, impact ring, star flash and slash on every hit, bigger on crits |

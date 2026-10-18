@@ -73,6 +73,10 @@ public class AutoFirework extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
+        if (clicking) {
+            clicking = false;
+            mc.options.keyUse.setDown(meteordevelopment.meteorclient.utils.misc.input.Input.isPressed(mc.options.keyUse));
+        }
         if (mc.player == null || !mc.player.isFallFlying()) {
             rocket = null;
             restoreSlot();
@@ -108,7 +112,9 @@ public class AutoFirework extends Module {
             if (heldBefore < 0) heldBefore = selected;
             InvUtils.swap(rockets.slot(), false);
         }
-        mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
+        // a real right click: hold the use key for this tick, the game uses the rocket exactly like you clicking
+        mc.options.keyUse.setDown(true);
+        clicking = true;
         sinceFired = 0;
         rocket = null;
         watching = true;
@@ -123,6 +129,8 @@ public class AutoFirework extends Module {
         if (rocket != null) return rocket.isRemoved();
         return !watching || sinceFired > rocketLife;
     }
+
+    private boolean clicking;
 
     private void restoreSlot() {
         if (heldBefore >= 0 && mc.player != null) InvUtils.swap(heldBefore, false);

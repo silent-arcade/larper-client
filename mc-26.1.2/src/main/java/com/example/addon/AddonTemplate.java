@@ -117,6 +117,7 @@ public class AddonTemplate extends MeteorAddon {
         Modules.get().add(new com.example.addon.modules.Aspect());
         Modules.get().add(new com.example.addon.modules.Drugs());
         Modules.get().add(new com.example.addon.modules.SkyShaders());
+        Modules.get().add(new com.example.addon.modules.TimePresets());
         Modules.get().add(new com.example.addon.modules.ShaderHands());
 
         Commands.add(new CommandExample());
