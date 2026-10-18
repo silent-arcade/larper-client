@@ -77,6 +77,7 @@ public class SchematicBuilder extends Module {
     public enum From { Bottom, Top }
     public enum Turn { None, Right90, Turn180, Left90 }
     public enum Speed { Human, Fast, VeryFast }
+    public enum LayerView { All, Current, UpToCurrent }
 
     private static final String[] EXTENSIONS = {".litematic", ".schem", ".nbt"};
     private static final Set<String> FREE_PROPS = Set.of("waterlogged", "powered", "power", "lit", "shape", "north", "south", "east", "west",
@@ -172,6 +173,21 @@ public class SchematicBuilder extends Module {
     private final Setting<SettingColor> supportColor = sgPreview.add(new ColorSetting.Builder()
         .name("support-color").description("Temporary support blocks.").defaultValue(new SettingColor(255, 150, 40, 70)).visible(preview::get).build());
 
+    private final Setting<SettingColor> wrongStateColor = sgPreview.add(new ColorSetting.Builder()
+        .name("wrong-rotation-color").description("The right block, but facing the wrong way or in the wrong state.").defaultValue(new SettingColor(255, 170, 30, 70)).visible(preview::get).build());
+
+    private final Setting<LayerView> layerView = sgPreview.add(new EnumSetting.Builder<LayerView>()
+        .name("layers").description("All: the whole schematic. Current: only the layer being built now. Up to current: hides the layers above it.").defaultValue(LayerView.All).visible(preview::get).build());
+
+    private final Setting<Boolean> arrows = sgPreview.add(new BoolSetting.Builder()
+        .name("facing-arrows").description("Arrows on blocks that face a direction (stairs, observers, pistons, logs...) so you can see which way they'll go.").defaultValue(true).visible(preview::get).build());
+
+    private final Setting<Boolean> lookInfo = sgPreview.add(new BoolSetting.Builder()
+        .name("look-info").description("Look at a spot in the schematic to see what block goes there, which way it faces, and whether it's missing or wrong.").defaultValue(true).visible(preview::get).build());
+
+    private final Setting<Boolean> materials = sgPreview.add(new BoolSetting.Builder()
+        .name("material-list").description("Show the blocks still needed, how many you have and how many are still to place.").defaultValue(true).build());
+
     private final Setting<Integer> previewRange = sgPreview.add(new IntSetting.Builder()
         .name("preview-range").description("Only show blocks within this many blocks of you.").defaultValue(32).range(4, 96).sliderRange(8, 64).visible(preview::get).build());
 
@@ -186,6 +202,10 @@ public class SchematicBuilder extends Module {
     private record Target(BlockPos pos, BlockState state, Item item) {}
 
     private record Plan(BlockPos click, Direction side, Vec3d hit) {}
+
+    private record Pending(BlockPos at, BlockState want, BlockPos clickPos, Direction side, BlockState clicked, int ticks) {}
+
+    private Pending pending;
 
     private Schematic loaded;
     private final List<Target> targets = new ArrayList<>();
@@ -222,7 +242,7 @@ public class SchematicBuilder extends Module {
     private String status = "";
 
     public SchematicBuilder() {
-        super(AddonTemplate.AUTOMATION, "schematic-builder", "Builds a schematic like a real player: takes materials from your chest, places every block with real rotations and uses temporary supports when needed.");
+        super(AddonTemplate.AUTOMATION, "schematic-builder", "Builds a schematic like a real player: real left-click breaking, crouches to place against chests and other clickable blocks, learns from its mistakes, and shows a detailed preview.");
     }
 
     private Path folder() {
@@ -411,7 +431,7 @@ public class SchematicBuilder extends Module {
         savedBaritone = null;
         walking = false;
         releaseKeys();
-        if (mc.interactionManager != null) mc.interactionManager.cancelBlockBreaking();
+        if (mc.options != null) mc.options.attackKey.setPressed(false);
         if (mode == Mode.RESTOCK && mc.player != null && mc.player.currentScreenHandler instanceof GenericContainerScreenHandler) mc.player.closeHandledScreen();
         mode = Mode.IDLE;
         if (why != null) ChatUtils.info("Schematic Builder: %s", why);
@@ -419,6 +439,7 @@ public class SchematicBuilder extends Module {
 
     private void releaseKeys() {
         if (mc.options == null) return;
+        mc.options.attackKey.setPressed(false);
         mc.options.sneakKey.setPressed(false);
         mc.options.forwardKey.setPressed(false);
         mc.options.backKey.setPressed(false);
@@ -667,6 +688,7 @@ public class SchematicBuilder extends Module {
             return;
         }
         if (mode != Mode.BUILDING && mode != Mode.RESTOCK) return;
+        if (pending != null && mode == Mode.BUILDING) checkPending();
         if (mode == Mode.BUILDING && mc.currentScreen != null) return;
         String reason = Automation.pauseReason(pauseOnMove.get(), pauseOnPlayer.get(), playerRange.get(), pauseOnHealth.get(), minHealth.get());
         if (reason != null && pauseReason == null) {
@@ -676,7 +698,6 @@ public class SchematicBuilder extends Module {
             crouch = false;
             jumpFrom = null;
             releaseKeys();
-            mc.interactionManager.cancelBlockBreaking();
             if (!reason.startsWith("you're")) ChatUtils.warning("Schematic Builder paused: %s", reason);
         } else if (reason == null && pauseReason != null && !pauseReason.startsWith("you're")) ChatUtils.info("Schematic Builder resumed.");
         pauseReason = reason;
@@ -686,6 +707,8 @@ public class SchematicBuilder extends Module {
             walking = false;
             if (walkGoal != null && !mc.player.getBlockPos().equals(walkGoal)) unreachable.add(walkGoal.asLong());
         }
+        // only breakStep holds left click, and only on the tick it's aimed at the block
+        mc.options.attackKey.setPressed(false);
         if (wait > 0) {
             wait--;
             return;
@@ -721,7 +744,7 @@ public class SchematicBuilder extends Module {
         if (breaking != null) {
             if (mc.world.getBlockState(breaking).isAir()) {
                 breaking = null;
-                mc.interactionManager.cancelBlockBreaking();
+                mc.options.attackKey.setPressed(false);
                 wait = actionDelay.get();
             } else breakStep(breaking);
             return;
@@ -950,13 +973,63 @@ public class SchematicBuilder extends Module {
             }
         }
         if (!select(item)) return;
-        boolean sneak = BlockUtils.isClickable(mc.world.getBlockState(hit.getBlockPos()).getBlock()) && !hit.getBlockPos().equals(at);
+        BlockState clicked = mc.world.getBlockState(hit.getBlockPos());
+        boolean sneak = needsSneak(clicked) && !hit.getBlockPos().equals(at);
         mc.options.sneakKey.setPressed(sneak || crouch);
         if ((sneak || crouch) && !mc.player.isSneaking()) return;
         mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
         mc.player.swingHand(Hand.MAIN_HAND);
+        if (want != null) pending = new Pending(at, want, hit.getBlockPos(), hit.getSide(), clicked, 0);
         mc.options.sneakKey.setPressed(crouch);
         wait = actionDelay.get() + jitter(3);
+    }
+
+    // Right-clicking these opens or changes them instead of placing against them, so crouch (shift) while placing
+    private static boolean interactive(BlockState s) {
+        Block b = s.getBlock();
+        return BlockUtils.isClickable(b) || s.hasBlockEntity() || b instanceof net.minecraft.block.NoteBlock || b instanceof net.minecraft.block.AbstractRedstoneGateBlock
+            || b instanceof net.minecraft.block.LeverBlock || b instanceof net.minecraft.block.ButtonBlock || b instanceof net.minecraft.block.TrapdoorBlock
+            || b instanceof net.minecraft.block.FenceGateBlock || b instanceof net.minecraft.block.DoorBlock || b instanceof net.minecraft.block.BedBlock
+            || b instanceof net.minecraft.block.AnvilBlock || b instanceof net.minecraft.block.AbstractCauldronBlock || b instanceof net.minecraft.block.ComposterBlock
+            || b instanceof net.minecraft.block.CakeBlock || b instanceof net.minecraft.block.FlowerPotBlock || b instanceof net.minecraft.block.RespawnAnchorBlock
+            || b instanceof net.minecraft.block.CraftingTableBlock || b instanceof net.minecraft.block.GrindstoneBlock || b instanceof net.minecraft.block.StonecutterBlock
+            || b instanceof net.minecraft.block.LoomBlock || b instanceof net.minecraft.block.CartographyTableBlock || b instanceof net.minecraft.block.SmithingTableBlock
+            || b instanceof net.minecraft.block.RedstoneWireBlock || b instanceof net.minecraft.block.CandleBlock || b instanceof net.minecraft.block.CandleCakeBlock;
+    }
+
+    private static boolean needsSneak(BlockState s) {
+        return interactive(s) || com.example.addon.util.BuildMemory.needsSneak(s.getBlock());
+    }
+
+    // After every placement, check what really happened and remember it
+    private void checkPending() {
+        Pending pd = pending;
+        if (mc.currentScreen != null && pd.ticks() <= 10) {
+            if (mc.player.currentScreenHandler != mc.player.playerScreenHandler) mc.player.closeHandledScreen();
+            else mc.setScreen(null);
+            pending = null;
+            if (com.example.addon.util.BuildMemory.learnSneak(pd.clicked().getBlock()))
+                ChatUtils.info("Schematic Builder learned: clicking %s opens it, so it will crouch when placing against it.", pd.clicked().getBlock().getName().getString());
+            return;
+        }
+        pending = new Pending(pd.at(), pd.want(), pd.clickPos(), pd.side(), pd.clicked(), pd.ticks() + 1);
+        if (pd.ticks() + 1 < 4) return;
+        pending = null;
+        BlockState got = mc.world.getBlockState(pd.at());
+        Block want = pd.want().getBlock();
+        String name = want.getName().getString();
+        if (matches(got, pd.want())) {
+            com.example.addon.util.BuildMemory.recordSide(want, pd.side(), true);
+        } else if (got.getBlock() == want) {
+            if (com.example.addon.util.BuildMemory.recordSide(want, pd.side(), false))
+                ChatUtils.info("Schematic Builder learned: %s came out facing the wrong way when placed on a %s face, so it'll use another face.", name, pd.side().asString());
+        } else if (got.isAir() || got.isReplaceable()) {
+            if (!mc.world.getBlockState(pd.clickPos()).equals(pd.clicked())) {
+                if (com.example.addon.util.BuildMemory.learnSneak(pd.clicked().getBlock()))
+                    ChatUtils.info("Schematic Builder learned: clicking %s changes it instead of placing, so it will crouch when placing against it.", pd.clicked().getBlock().getName().getString());
+            } else if (com.example.addon.util.BuildMemory.recordSide(want, pd.side(), false))
+                ChatUtils.info("Schematic Builder learned: %s wouldn't go down on a %s face here, so it'll try another face.", name, pd.side().asString());
+        }
     }
 
     private boolean select(Item item) {
@@ -999,7 +1072,8 @@ public class SchematicBuilder extends Module {
                     float[] rot = anglesTo(eye, hit);
                     BlockState got = simulate(t, n, side, hit, stack, rot[0], rot[1], want);
                     if (!matches(got, want)) continue;
-                    double score = dist + Math.abs(MathHelper.wrapDegrees(rot[0] - mc.player.getYaw())) / 90 + (a == 0 && b == 0 ? 0 : 0.2) + (Math.abs(a) > 0.4 || Math.abs(b) > 0.4 ? 0.3 : 0);
+                    double score = dist + Math.abs(MathHelper.wrapDegrees(rot[0] - mc.player.getYaw())) / 90 + (a == 0 && b == 0 ? 0 : 0.2) + (Math.abs(a) > 0.4 || Math.abs(b) > 0.4 ? 0.3 : 0)
+                        + com.example.addon.util.BuildMemory.sideScore(want.getBlock(), side) * 0.6;
                     if (score < bestDist && robust(t, n, side, hit, stack, rot, want)) {
                         bestDist = score;
                         best = new Plan(n, side, hit);
@@ -1134,7 +1208,8 @@ public class SchematicBuilder extends Module {
         BlockState s = mc.world.getBlockState(p);
         FindItemResult tool = InvUtils.findFastestTool(s);
         if (tool.found() && tool.isHotbar() && mc.player.getInventory().getSelectedSlot() != tool.slot()) InvUtils.swap(tool.slot(), false);
-        if (mc.interactionManager.updateBlockBreakingProgress(p, hit.getSide())) mc.player.swingHand(Hand.MAIN_HAND);
+        // hold left click while the crosshair is on it; the game does the breaking, exactly like a player
+        mc.options.attackKey.setPressed(true);
     }
 
     private boolean inReach(Vec3d p) {
@@ -1381,13 +1456,29 @@ public class SchematicBuilder extends Module {
         ChatUtils.info("Schematic Builder: placed at %s. Press Start building when ready.", origin.get().toShortString());
     }
 
+    private final List<Map.Entry<Item, Integer>> needList = new ArrayList<>();
+    private int currentLayer = Integer.MIN_VALUE;
+
     private void refreshPreview() {
         previewList.clear();
-        if (!isActive() || targets.isEmpty() || !preview.get()) return;
+        needList.clear();
+        if (!isActive() || targets.isEmpty()) return;
+        Map<Item, Integer> need = new LinkedHashMap<>();
+        currentLayer = Integer.MAX_VALUE;
+        for (Target t : targets) {
+            if (done(t) || skipped.contains(t.pos().asLong())) continue;
+            need.merge(t.item(), 1, Integer::sum);
+            currentLayer = Math.min(currentLayer, t.pos().getY());
+        }
+        needList.addAll(need.entrySet());
+        needList.sort((a, b) -> b.getValue() - a.getValue());
+        if (!preview.get()) return;
         BlockPos me = mc.player.getBlockPos();
         int r = previewRange.get();
         for (Target t : targets) {
             if (Math.abs(t.pos().getX() - me.getX()) > r || Math.abs(t.pos().getY() - me.getY()) > r || Math.abs(t.pos().getZ() - me.getZ()) > r) continue;
+            if (layerView.get() == LayerView.Current && t.pos().getY() != currentLayer) continue;
+            if (layerView.get() == LayerView.UpToCurrent && t.pos().getY() > currentLayer) continue;
             if (done(t)) continue;
             previewList.add(t);
         }
@@ -1407,17 +1498,78 @@ public class SchematicBuilder extends Module {
             event.renderer.box(new Box(o.getX(), o.getY(), o.getZ(), o.getX() + s.sizeX, o.getY() + s.sizeY, o.getZ() + s.sizeZ), edge, edge, ShapeMode.Lines, 0);
         }
         if (!preview.get()) return;
-        SettingColor miss = missingColor.get(), wrong = wrongColor.get();
+        SettingColor miss = missingColor.get(), wrong = wrongColor.get(), rot = wrongStateColor.get();
         SettingColor missLine = new SettingColor(miss.r, miss.g, miss.b, Math.min(255, miss.a * 3 + 40)), wrongLine = new SettingColor(wrong.r, wrong.g, wrong.b, 220);
+        SettingColor rotLine = new SettingColor(rot.r, rot.g, rot.b, 230), arrowColor = new SettingColor(255, 255, 255, 200);
         for (Target t : previewList) {
             BlockState here = mc.world.getBlockState(t.pos());
-            boolean isWrong = !here.isAir() && !here.isReplaceable();
-            event.renderer.box(t.pos(), isWrong ? wrong : miss, isWrong ? wrongLine : missLine, ShapeMode.Both, 0);
+            boolean sameBlock = here.getBlock() == t.state().getBlock();
+            boolean isWrong = !here.isAir() && !here.isReplaceable() && !sameBlock;
+            SettingColor fill = isWrong ? wrong : sameBlock ? rot : miss, line = isWrong ? wrongLine : sameBlock ? rotLine : missLine;
+            // show the real shape (slabs, stairs, fences...) instead of a full cube where it has one
+            Box shape = shapeOf(t);
+            event.renderer.box(shape, fill, line, ShapeMode.Both, 0);
+            if (arrows.get() && !isWrong) drawFacing(event, t);
         }
         SettingColor sup = supportColor.get(), supLine = new SettingColor(sup.r, sup.g, sup.b, 230);
         for (BlockPos p : supports) event.renderer.box(p, sup, supLine, ShapeMode.Both, 0);
         for (BlockPos p : supportsToPlace) event.renderer.box(p, sup, supLine, ShapeMode.Lines, 0);
         if (current != null) event.renderer.box(current.pos(), new SettingColor(255, 255, 255, 60), new SettingColor(255, 255, 255, 255), ShapeMode.Both, 0);
+    }
+
+    private Box shapeOf(Target t) {
+        var outline = t.state().getOutlineShape(mc.world, t.pos());
+        if (outline.isEmpty()) return new Box(t.pos());
+        Box b = outline.getBoundingBox();
+        if (b.getLengthX() < 0.05 || b.getLengthY() < 0.05 || b.getLengthZ() < 0.05) return new Box(t.pos());
+        return b.offset(t.pos());
+    }
+
+    private static Direction facingOf(BlockState s) {
+        if (s.contains(Properties.FACING)) return s.get(Properties.FACING);
+        if (s.contains(Properties.HORIZONTAL_FACING)) return s.get(Properties.HORIZONTAL_FACING);
+        if (s.contains(Properties.HOPPER_FACING)) return s.get(Properties.HOPPER_FACING);
+        return null;
+    }
+
+    private void drawFacing(Render3DEvent event, Target t) {
+        Vec3d c = Vec3d.ofCenter(t.pos());
+        Direction d = facingOf(t.state());
+        if (d == null && t.state().contains(Properties.AXIS)) {
+            Vec3d a = Vec3d.of(Direction.from(t.state().get(Properties.AXIS), Direction.AxisDirection.POSITIVE).getVector()).multiply(0.42);
+            event.renderer.line(c.x - a.x, c.y - a.y, c.z - a.z, c.x + a.x, c.y + a.y, c.z + a.z, new SettingColor(255, 255, 255, 200));
+            return;
+        }
+        if (d == null) return;
+        Vec3d v = Vec3d.of(d.getVector());
+        Vec3d tip = c.add(v.multiply(0.42)), tail = c.subtract(v.multiply(0.3));
+        Vec3d side = d.getAxis() == Direction.Axis.Y ? new Vec3d(1, 0, 0) : new Vec3d(0, 1, 0).crossProduct(v);
+        SettingColor col = new SettingColor(255, 255, 255, 220);
+        event.renderer.line(tail.x, tail.y, tail.z, tip.x, tip.y, tip.z, col);
+        for (int k = -1; k <= 1; k += 2) {
+            Vec3d wing = tip.subtract(v.multiply(0.18)).add(side.multiply(0.14 * k));
+            event.renderer.line(tip.x, tip.y, tip.z, wing.x, wing.y, wing.z, col);
+        }
+    }
+
+    private String describe(BlockState s) {
+        StringBuilder sb = new StringBuilder(s.getBlock().getName().getString());
+        List<String> props = new ArrayList<>();
+        for (Property<?> p : s.getProperties()) if (!FREE_PROPS.contains(p.getName())) props.add(p.getName() + "=" + s.get(p));
+        if (!props.isEmpty()) sb.append(" [").append(String.join(", ", props)).append("]");
+        return sb.toString();
+    }
+
+    private String lookLine() {
+        if (!(mc.crosshairTarget instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) return null;
+        for (BlockPos p : new BlockPos[] {hit.getBlockPos(), hit.getBlockPos().offset(hit.getSide())}) {
+            Target t = byPos.get(p.asLong());
+            if (t == null) continue;
+            BlockState here = mc.world.getBlockState(p);
+            String state = done(t) ? "done" : here.isAir() || here.isReplaceable() ? "missing" : here.getBlock() == t.state().getBlock() ? "wrong rotation (is " + describe(here) + ")" : "wrong block (is " + here.getBlock().getName().getString() + ")";
+            return "  looking at: " + describe(t.state()) + " - " + state;
+        }
+        return null;
     }
 
     @EventHandler
@@ -1437,6 +1589,26 @@ public class SchematicBuilder extends Module {
             }
             else if (mode == Mode.IDLE) lines.add("  ready: press Start building (preview shows where it goes)");
             else if (mode == Mode.DONE) lines.add("  finished" + (skipped.isEmpty() ? "" : " (" + skipped.size() + " skipped)"));
+            if (preview.get() && lookInfo.get()) {
+                String look = lookLine();
+                if (look != null) lines.add(look);
+            }
+            if (materials.get() && !needList.isEmpty()) {
+                lines.add("  still to place (you have):");
+                int i = 0;
+                for (Map.Entry<Item, Integer> e : needList) {
+                    if (i++ == 4) {
+                        lines.add("    ... and " + (needList.size() - 4) + " more");
+                        break;
+                    }
+                    int have = count(e.getKey());
+                    lines.add(String.format("    %s  %d  (%d)%s", e.getKey().getName().getString(), e.getValue(), have, have < e.getValue() ? "  - short " + (e.getValue() - have) : ""));
+                }
+            }
+            if (layerView.get() != LayerView.All && currentLayer != Integer.MAX_VALUE && currentLayer != Integer.MIN_VALUE)
+                lines.add("  showing layer y=" + currentLayer + (layerView.get() == LayerView.UpToCurrent ? " and below" : ""));
+            int learned = com.example.addon.util.BuildMemory.lessons();
+            if (learned > 0) lines.add("  learned from " + learned + " mistake(s) so far");
             if (!missingItems.isEmpty()) {
                 StringBuilder sb = new StringBuilder("  missing: ");
                 int i = 0;

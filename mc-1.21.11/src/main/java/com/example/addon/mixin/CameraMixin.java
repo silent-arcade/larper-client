@@ -30,7 +30,11 @@ public abstract class CameraMixin {
         if (focused == null || Modules.get().isActive(Freecam.class)) return;
         SmoothThirdPerson trail = Modules.get().get(SmoothThirdPerson.class);
         if (thirdPerson && trail != null && trail.isActive()) setPos(trail.apply(getCameraPos(), focused, tickProgress));
+        com.example.addon.modules.AutoF5 f5 = Modules.get().get(com.example.addon.modules.AutoF5.class);
+        if (thirdPerson && f5 != null && f5.isActive() && f5.drivesCamera()) setPos(f5.apply(getCameraPos(), focused, tickProgress));
         CameraTilt tilt = Modules.get().get(CameraTilt.class);
         if (tilt != null && tilt.isActive()) rotation.rotateZ((float) Math.toRadians(tilt.roll(focused, tickProgress, thirdPerson)));
+        com.example.addon.modules.Drugs drugs = Modules.get().get(com.example.addon.modules.Drugs.class);
+        if (drugs != null && drugs.isActive()) rotation.rotateZ((float) Math.toRadians(drugs.roll()));
     }
 }

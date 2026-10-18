@@ -17,14 +17,45 @@ public abstract class VisualModule extends Module {
         .name("low-end-pc").description("Lighter version for low-end PCs: fewer particles and segments, and all the extra features below are skipped.")
         .defaultValue(false).onChanged(v -> onLowEndChanged()).build());
 
+    private final SettingGroup look = settings.createGroup("Look");
+
+    private final Setting<FxTheme> colorTheme = look.add(new meteordevelopment.meteorclient.settings.EnumSetting.Builder<FxTheme>()
+        .name("color-theme").description("Recolour every effect of this module with a theme that flows across rings and between effects. Custom = the module's own colours.")
+        .defaultValue(FxTheme.Custom).build());
+
+    private final Setting<Integer> opacity = look.add(new meteordevelopment.meteorclient.settings.IntSetting.Builder()
+        .name("opacity").description("How strong the effects are (%). Lower = subtler, higher = punchier.").defaultValue(100).range(10, 200).sliderRange(20, 200).build());
+
+    private final Setting<Double> fadeIn = look.add(new meteordevelopment.meteorclient.settings.DoubleSetting.Builder()
+        .name("fade-in").description("Seconds the effects take to fade in when you turn the module on (0 = instant).").defaultValue(0.3).range(0, 3).sliderRange(0, 1).build());
+
     private SettingGroup features;
     private Setting<Boolean> bloom;
+    private double enabledAt;
 
     protected VisualModule(String name, String description) {
         super(AddonTemplate.VISUAL, name, description);
     }
 
     protected void onLowEndChanged() {
+    }
+
+    @Override
+    public void toggle() {
+        super.toggle();
+        if (isActive()) enabledAt = Fx.time();
+    }
+
+    // every helper below runs its colour through here: theme, opacity and the fade-in
+    protected Color tint(Color c, double t) {
+        double fade = fadeIn.get() <= 0 ? 1 : Math.min(1, (Fx.time() - enabledAt) / fadeIn.get());
+        int a = (int) Math.min(255, c.a * opacity.get() / 100.0 * fade);
+        if (colorTheme.get() == FxTheme.Custom) return Fx.alpha(c, a);
+        return colorTheme.get().color(t, a, c);
+    }
+
+    private Color tint(Color c, Vec3 at) {
+        return tint(c, Fx.time() * 0.15 + (at.x + at.z) * 0.05);
     }
 
     protected boolean low() {
@@ -54,10 +85,11 @@ public abstract class VisualModule extends Module {
     }
 
     protected void glow(Renderer3D r, Vec3 c, double radius, Color color) {
-        Fx.glow(r, c, radius, color, bloom(), low());
+        Fx.glow(r, c, radius, tint(color, c), bloom(), low());
     }
 
-    protected void outline(Renderer3D r, AABB box, Color color) {
+    protected void outline(Renderer3D r, AABB box, Color raw) {
+        Color color = tint(raw, box.getCenter());
         r.box(box, color, color, ShapeMode.Lines, 0);
         if (bloom()) r.box(box.inflate(0.03), Fx.alpha(color, color.a / 3), Fx.alpha(color, color.a / 3), ShapeMode.Lines, 0);
     }
@@ -67,22 +99,23 @@ public abstract class VisualModule extends Module {
     }
 
     protected void ring(Renderer3D r, Vec3 c, double inner, double outer, int segments, DoubleFunction<Color> colorAt) {
-        Fx.ring(r, c, inner, outer, segments, colorAt, bloom(), low());
+        double now = Fx.time();
+        Fx.ring(r, c, inner, outer, segments, u -> tint(colorAt.apply(u), u + now * 0.2), bloom(), low());
     }
 
     protected void shockwave(Renderer3D r, Vec3 at, double f, double size, Color color) {
-        Fx.shockwave(r, at, f, size, color, bloom(), low());
+        Fx.shockwave(r, at, f, size, tint(color, at), bloom(), low());
     }
 
     protected void spark(Renderer3D r, Vec3 c, double size, Color color) {
-        Fx.spark(r, c, size, color, !bloom());
+        Fx.spark(r, c, size, tint(color, c), !bloom());
     }
 
     protected void spark(Renderer3D r, Vec3 c, double size, Color color, boolean small) {
-        Fx.spark(r, c, size, color, small || !bloom());
+        Fx.spark(r, c, size, tint(color, c), small || !bloom());
     }
 
     protected void beam(Renderer3D r, Vec3 base, double radius, double height, Color color) {
-        Fx.beam(r, base, radius, height, color, low());
+        Fx.beam(r, base, radius, height, tint(color, base), low());
     }
 }

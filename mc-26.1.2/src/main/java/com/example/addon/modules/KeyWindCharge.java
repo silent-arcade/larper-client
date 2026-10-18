@@ -18,21 +18,29 @@ public class KeyWindCharge extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
 
     private final Setting<Keybind> throwKey = sgGeneral.add(new KeybindSetting.Builder()
-        .name("throw-key").description("Key that throws a wind charge.")
+        .name("throw-key").description("Key that throws it.")
         .defaultValue(Keybind.none())
         .action(this::throwCharge)
         .build());
 
     private final Setting<Integer> swapDelay = sgGeneral.add(new IntSetting.Builder()
-        .name("swap-delay").description("Ticks to hold the wind charge before throwing, and after before swapping back (20 = 1 second). 0 = instant.")
+        .name("swap-delay").description("Ticks to hold it before throwing, and after before swapping back (20 = 1 second). 0 = instant.")
         .defaultValue(0).range(0, 20).sliderRange(0, 20)
         .build());
 
     private int timer = -1;
     private boolean thrown;
+    private final net.minecraft.world.item.Item item;
+    private final String itemName;
 
     public KeyWindCharge() {
-        super(AddonTemplate.AUTOMATION, "key-wind-charge", "Throws a wind charge when you press a key.");
+        this("key-wind-charge", "Throws a wind charge when you press a key.", Items.WIND_CHARGE, "wind charge");
+    }
+
+    protected KeyWindCharge(String name, String description, net.minecraft.world.item.Item item, String itemName) {
+        super(AddonTemplate.AUTOMATION, name, description);
+        this.item = item;
+        this.itemName = itemName;
     }
 
     @Override
@@ -58,13 +66,13 @@ public class KeyWindCharge extends Module {
         if (mc.player == null || mc.gameMode == null || mc.screen != null || timer >= 0) return;
         int slot = -1;
         for (int i = 0; i < 9; i++) {
-            if (mc.player.getInventory().getItem(i).is(Items.WIND_CHARGE)) {
+            if (mc.player.getInventory().getItem(i).is(item)) {
                 slot = i;
                 break;
             }
         }
         if (slot < 0) {
-            ChatUtils.warning("No wind charge in your hotbar.");
+            ChatUtils.warning("No %s in your hotbar.", itemName);
             return;
         }
         InvUtils.swap(slot, true);

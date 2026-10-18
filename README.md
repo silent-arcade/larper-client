@@ -44,6 +44,12 @@ Custom Sky also needs the [Skyboxify](https://modrinth.com/mod/skyboxify) mod.
 | Compass | A compass strip with directions and degrees |
 | BPS | Your speed in blocks per second |
 | Hit Sounds | Your own sound when a hit lands |
+| TNT Timer | Big countdown over lit TNT with a blast-radius ring, pulsing outline and fuse sparks |
+| Hit Particles | Spark burst, impact ring, star flash and slash on every hit, bigger on crits |
+| Skeleton ESP | A themed stick-figure skeleton inside every player that moves with them, through walls |
+| Auto F5 | Third person while you fly, ride, swim, fall, fight or go fast, with a smooth camera glide |
+| Aspect | Stretched-resolution presets (4:3, 5:4, 16:10, square, ultrawide); your HUD stays normal |
+| Drugs | Trippy screen: colour wash, rolling colour waves, pulsing vignette, swaying camera |
 | Crystal FX | End crystals glow, with spin rings, light pillars, a spawn ring, and a shockwave plus sparks when one pops |
 | Anchor FX | Respawn anchors show their charge, pulse when charged, get a warning beam when full and blow with a shockwave and sparks |
 | Mace FX | Landing target, smash damage preview and a big shockwave on the hit |
@@ -71,7 +77,7 @@ Custom Sky also needs the [Skyboxify](https://modrinth.com/mod/skyboxify) mod.
 | TNT Cart Assist | Predicts your flame-bow arrow and places a rail and TNT minecart in its path (normal reach only) |
 | Key Wind Charge | Throws a wind charge with one key |
 | Twerk | Crouches and uncrouches fast |
-| Schematic Builder | Builds a .litematic/.schem/.nbt like a player: takes materials from your chest, places every block facing the right way (uses temporary supports, crouching or pillaring when needed) and walks with Baritone |
+| Schematic Builder | Builds a .litematic/.schem/.nbt like a player: takes materials from your chest, breaks with a real held left click, crouches to place against chests and other clickable blocks, learns from its mistakes and shows a detailed preview |
 | Area Miner | Left-click two corners and it clears the box out with a real held left click; made for 3x3 pickaxes like the Shard Pickaxe, no Baritone needed |
 | Debris Finder | Finds ancient debris from the world seed and checks each spot against what the server shows you |
 | Auto Miner | Mines your chosen ores with Baritone, pausing near players, at low health or when you move |
@@ -86,6 +92,14 @@ Custom Sky also needs the [Skyboxify](https://modrinth.com/mod/skyboxify) mod.
 | Region Route | **DonutSMP:** which way and how far to any region, with blocks N/S/E/W, nether coordinates and a waypoint. Also the `.region` command (`.region 5`, `.region 28 5`) |
 | Ore Sim | Shows where ores generate from the world seed (`.seed <seed>`). Ported from Meteor Rejects |
 | Turn Off All | Turns off every module at once |
+| Triggerbot | Clicks for you when your crosshair is on a target: full-charge hits, smart crits, random reaction time, skips shields |
+| Auto Mace | Swaps to your best mace when you fall onto someone, with optional auto-hit |
+| Shield Breaker | Swaps to an axe to disable a blocking player's shield, and can break shields automatically |
+| Spin Bot | Spins, jitters or sways your head for other players (six modes); your view doesn't move |
+| Elytra Jump | Opens your elytra when you jump and can fire a rocket to take off from the ground |
+| Snap Tap | Holding A and D (or W and S), the key you pressed last wins |
+| Key Pearl | Throws an ender pearl from your hotbar on a key |
+| Crystal Optimizer | Removes a crystal on your screen the moment you hit it, so you can place the next one sooner |
 | Auto Home Method | Sets a home, /rtp's away, then /home's back |
 | Render Method | Drops your render distance to 2 for a moment, then back to normal |
 

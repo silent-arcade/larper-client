@@ -101,6 +101,20 @@ public class AddonTemplate extends MeteorAddon {
         Modules.get().add(new com.example.addon.modules.MaceFX());
         Modules.get().add(new com.example.addon.modules.NoFog());
         Modules.get().add(new com.example.addon.modules.ClickGuiStyle());
+        Modules.get().add(new com.example.addon.modules.Triggerbot());
+        Modules.get().add(new com.example.addon.modules.ShieldBreaker());
+        Modules.get().add(new com.example.addon.modules.AutoMace());
+        Modules.get().add(new com.example.addon.modules.SpinBot());
+        Modules.get().add(new com.example.addon.modules.ElytraJump());
+        Modules.get().add(new com.example.addon.modules.SnapTap());
+        Modules.get().add(new com.example.addon.modules.KeyPearl());
+        Modules.get().add(new com.example.addon.modules.CrystalOptimizer());
+        Modules.get().add(new com.example.addon.modules.TntTimer());
+        Modules.get().add(new com.example.addon.modules.HitParticles());
+        Modules.get().add(new com.example.addon.modules.AutoF5());
+        Modules.get().add(new com.example.addon.modules.SkeletonESP());
+        Modules.get().add(new com.example.addon.modules.Aspect());
+        Modules.get().add(new com.example.addon.modules.Drugs());
 
         Commands.add(new CommandExample());
         Commands.add(new SeedCommand());

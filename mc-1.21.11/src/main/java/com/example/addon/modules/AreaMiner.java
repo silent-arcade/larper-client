@@ -67,7 +67,7 @@ public class AreaMiner extends Module {
         .name("area-color").description("Outline colour.").defaultValue(new SettingColor(255, 170, 0, 255)).visible(showArea::get).build());
 
     private final Setting<Pickaxe> pickaxe = sgMining.add(new EnumSetting.Builder<Pickaxe>()
-        .name("pickaxe").description("ThreeByThree: hit only the middle of each 3x3 face and let the pickaxe break the rest. Normal: break every block.")
+        .name("pickaxe").description("ThreeByThree: only ever hits the middle block and lets your pickaxe break the other 8 - the middle of the wall in front when tunnelling, and the block under you, looking straight down, when going down a level. Normal: breaks every block itself.")
         .defaultValue(Pickaxe.ThreeByThree).build());
 
     private final Setting<Integer> settleTicks = sgMining.add(new IntSetting.Builder()
@@ -438,10 +438,31 @@ public class AreaMiner extends Module {
             waitTicks = (wasMiddle && pickaxe.get() == Pickaxe.ThreeByThree ? settleTicks.get() : 0) + (humanize.get() ? rng.nextInt(3) : 0);
             if (waitTicks > 0) return false;
         }
+        if (pickaxe.get() == Pickaxe.ThreeByThree) {
+            for (BlockPos p : face) {
+                if (inArea(p) && stopAtLiquid.get() && !mc.world.getBlockState(p).getFluidState().isEmpty()) {
+                    stop("liquid ahead at " + p.toShortString() + " - stopped.");
+                    return false;
+                }
+            }
+            // only ever hit the middle and let the pickaxe break the other 8; if the middle is already gone,
+            // the only block it will touch is the one at your feet that would stop you walking forward
+            if (u != Direction.UP) {
+                // the floor when going down: only the middle, looking straight down so the pickaxe clears a flat 3x3
+                if (!inArea(middle) || !breakable(middle)) return true;
+                mineStraightDown(middle);
+                return false;
+            }
+            BlockPos walk = face.get(1);
+            BlockPos target = inArea(middle) && breakable(middle) ? middle : inArea(walk) && breakable(walk) ? walk : null;
+            if (target == null) return true;
+            Vec3d seen = seenPoint(target);
+            mine(target, seen != null ? seen : Vec3d.ofCenter(target));
+            return false;
+        }
         BlockPos target = null;
         Vec3d targetPoint = null;
         int best = Integer.MIN_VALUE;
-        boolean threeByThree = pickaxe.get() == Pickaxe.ThreeByThree;
         for (BlockPos p : face) {
             if (!inArea(p)) continue;
             BlockState s = mc.world.getBlockState(p);
@@ -450,8 +471,7 @@ public class AreaMiner extends Module {
                 return false;
             }
             if (!breakable(p)) continue;
-            int score = threeByThree ? reach(p, u, v) * 2 + (p.equals(middle) ? 1 : 0) : (p.equals(middle) ? (u == Direction.UP ? 1 : -1) : 0);
-            if (threeByThree && u == Direction.UP && breaksFloor(p)) score -= 100;
+            int score = p.equals(middle) ? (u == Direction.UP ? 1 : -1) : 0;
             Vec3d seen = seenPoint(p);
             if (seen != null) score += 1000;
             // same priority as before; among equals take the block nearest the crosshair so it sweeps instead of swinging around
@@ -470,21 +490,6 @@ public class AreaMiner extends Module {
     private boolean breakable(BlockPos p) {
         BlockState s = mc.world.getBlockState(p);
         return !s.isAir() && s.getHardness(mc.world, p) >= 0 && s.getFluidState().isEmpty();
-    }
-
-    private int reach(BlockPos p, Direction u, Direction v) {
-        int n = 0;
-        for (int a = -1; a <= 1; a++) for (int b = -1; b <= 1; b++) {
-            BlockPos q = p.offset(u, a).offset(v, b);
-            if (inArea(q) && breakable(q) && (u != Direction.UP || q.getY() >= bandBottom)) n++;
-        }
-        return n;
-    }
-
-    private boolean breaksFloor(BlockPos p) {
-        if (p.getY() > bandBottom) return false;
-        BlockPos below = p.down();
-        return inArea(below) && breakable(below);
     }
 
     private Vec3d seenPoint(BlockPos p) {
@@ -523,6 +528,16 @@ public class AreaMiner extends Module {
         // Hold left click only while the crosshair is on this block; the game itself does the breaking, like a real player
         HitResult seen = mc.player.raycast(mc.player.getBlockInteractionRange(), 1, false);
         mc.options.attackKey.setPressed(seen instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(pos));
+    }
+
+    // 3x3 pickaxes pick the 3x3's direction from where you look: looking down at an angle makes them break a standing
+    // 3-wide slice (a 3x2 hole), so look fully straight down before hitting the floor
+    private void mineStraightDown(BlockPos pos) {
+        mc.options.forwardKey.setPressed(false);
+        mining = pos;
+        turnTowardsAngles(mc.player.getYaw(), 90);
+        HitResult seen = mc.player.raycast(mc.player.getBlockInteractionRange(), 1, false);
+        mc.options.attackKey.setPressed(mc.player.getPitch() >= 86 && seen instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(pos));
     }
 
     private void walkTo(BlockPos pos) {

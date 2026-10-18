@@ -49,7 +49,10 @@ public final class Fx {
 
     public static void glow(Renderer3D r, Vec3d c, double radius, Color color, boolean bloom, boolean cheap) {
         Vec3d[] f = facing();
-        if (bloom) disc(r, c, f[0], f[1], radius * 2.3, alpha(color, color.a / 5), alpha(color, 0), cheap ? 10 : 20);
+        if (bloom) {
+            disc(r, c, f[0], f[1], radius * 3.4, alpha(color, color.a / 12), alpha(color, 0), cheap ? 10 : 22);
+            disc(r, c, f[0], f[1], radius * 2.1, alpha(color, color.a / 5), alpha(color, 0), cheap ? 10 : 20);
+        }
         disc(r, c, f[0], f[1], radius, alpha(color, color.a), alpha(color, 0), cheap ? 8 : 18);
         Color core = new Color(255, 255, 255, Math.min(255, color.a + 40));
         disc(r, c, f[0], f[1], radius * 0.32, core, alpha(color, color.a), cheap ? 6 : 12);
